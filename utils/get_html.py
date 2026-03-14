@@ -149,6 +149,7 @@ def get_facebook_page_after_login(
         print(f"Đang copy profile từ {master_path} sang {temp_profile_dir} ...")
 
         try:
+            # Copy toàn bộ nội dung profile master sang thư mục tạm
             shutil.copytree(
                 master_path,
                 temp_profile_dir,
@@ -166,9 +167,32 @@ def get_facebook_page_after_login(
 
         # --- Xóa sạch session/cookies khỏi profile tạm
         #     nhưng vẫn GIỮ lại các extension đã cài trong thư mục Default ---
+        # Đầu tiên làm sạch profile tạm (clean_profile sẽ giữ lại thư mục Extensions trong Default)
         print("Đang xóa cookies, session, IndexedDB khỏi profile tạm (giữ lại Extensions)...")
         clean_profile(temp_profile_dir)
         print("Đã xóa xong.")
+
+        # Đảm bảo thư mục Extensions từ master Default được copy sang profile tạm
+        try:
+            master_default = os.path.join(master_path, "Default")
+            temp_default = os.path.join(temp_profile_dir, "Default")
+            master_ext = os.path.join(master_default, "Extensions")
+            temp_ext = os.path.join(temp_default, "Extensions")
+
+            if os.path.isdir(master_ext):
+                os.makedirs(temp_default, exist_ok=True)
+                shutil.copytree(
+                    master_ext,
+                    temp_ext,
+                    symlinks=False,
+                    ignore_dangling_symlinks=True,
+                    dirs_exist_ok=True
+                )
+                print(f"Đã đảm bảo copy Extensions từ {master_ext} sang {temp_ext}.")
+            else:
+                print(f"Không tìm thấy thư mục Extensions trong master Default: {master_ext}")
+        except Exception as ext_err:
+            print(f"Lỗi khi copy thư mục Extensions từ master sang profile tạm: {ext_err}")
 
         # --- Khởi động Playwright ---
         playwright = sync_playwright().start()
