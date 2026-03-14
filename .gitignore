@@ -1,0 +1,6 @@
+# Ignore config files
+*.yaml
+*.yml
+
+# Ignore save files
+*.save
