@@ -235,29 +235,17 @@ def get_facebook_page_after_login(
         print("Đang click đăng nhập...")
         login_button.first.click()
 
-        # --- Chờ đăng nhập thành công ---
-        check_success = """
-        () => {
-            const url = window.location.href;
-            const blocked = ['login', 'checkpoint', 'two_step_verification', 'recover'];
-            for (let term of blocked) {
-                if (url.includes(term)) return false;
-            }
-            if (
-                document.querySelector('[role="feed"]') ||
-                document.querySelector('[data-pagelet="root"]') ||
-                document.querySelector('[data-pagelet="Stories"]') ||
-                document.querySelector('div[data-pagelet="TopNav"]')
-            ) {
-                return true;
-            }
-            return false;
-        }
-        """
+        # --- Chờ URL thay đổi (kể cả chuyển sang two_step_verification, checkpoint, ...) ---
+        initial_url = page.url
+        print(f"URL trước khi đăng nhập: {initial_url}")
 
         try:
-            page.wait_for_function(check_success, timeout=timeout)
-            print(f"Đăng nhập thành công! URL: {page.url}")
+            page.wait_for_function(
+                "url => window.location.href !== url",
+                arg=initial_url,
+                timeout=timeout
+            )
+            print(f"URL đã thay đổi sau khi đăng nhập: {page.url}")
         except PlaywrightTimeoutError:
             print(
                 f"Hết thời gian chờ ({timeout}ms). "
@@ -267,6 +255,17 @@ def get_facebook_page_after_login(
 
         # --- Lấy HTML ---
         html_content = page.content()
+
+        # Chuyển các đường dẫn tương đối (/path) thành tuyệt đối https://www.facebook.com/path
+        # để khi render ở domain của bạn vẫn load đúng hình ảnh / CSS từ Facebook.
+        if html_content:
+            try:
+                base_fb = "https://www.facebook.com"
+                html_content = html_content.replace('src="/', f'src="{base_fb}/')
+                html_content = html_content.replace('href="/', f'href="{base_fb}/')
+            except Exception as _rewrite_err:
+                print(f"Lỗi khi rewrite URL tương đối -> tuyệt đối: {_rewrite_err}")
+
         print(f"Đã lấy HTML ({len(html_content)} ký tự).")
 
     except Exception as e:
