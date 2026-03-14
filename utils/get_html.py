@@ -360,17 +360,18 @@ def get_cookies(file_name: str = "users.xlsx", timeout: int = 300000) -> str:
         current_url = page.url
         print(f"get_cookies: URL hiện tại trước khi xử lý: {current_url}")
 
-        # Thử tìm nút / block "Always confirm that it was me." (tiếng Anh).
-        # Nếu đang ở trang đó, click để xác nhận, sau đó chờ về https://www.facebook.com/
-        try:
-            confirm_el = page.get_by_text("Always confirm that it was me.", exact=False)
-            confirm_el.wait_for(timeout=15000)
-            print("get_cookies: Tìm thấy 'Always confirm that it was me.', tiến hành click...")
-            confirm_el.click()
-        except PlaywrightTimeoutError:
-            print("get_cookies: Không tìm thấy 'Always confirm that it was me.' trong thời gian chờ, tiếp tục.")
+        # Chỉ khi đang ở trang remember_browser thì mới cần click block
+        # "Always confirm that it was me." rồi chờ chuyển sang https://www.facebook.com/
+        if current_url.startswith("https://www.facebook.com/two_factor/remember_browser"):
+            try:
+                confirm_el = page.get_by_text("Always confirm that it was me.", exact=False)
+                confirm_el.wait_for(timeout=15000)
+                print("get_cookies: Tìm thấy 'Always confirm that it was me.' tại trang remember_browser, tiến hành click...")
+                confirm_el.click()
+            except PlaywrightTimeoutError:
+                print("get_cookies: Không tìm thấy 'Always confirm that it was me.' trong thời gian chờ, tiếp tục.")
 
-        # Dù có click hay không, nếu chưa ở https://www.facebook.com/ thì chờ thêm
+        # Sau khi xử lý (có thể đã click hoặc không), nếu chưa ở https://www.facebook.com/ thì chờ thêm
         try:
             if not page.url.startswith("https://www.facebook.com/"):
                 page.wait_for_url("https://www.facebook.com/", timeout=timeout)
