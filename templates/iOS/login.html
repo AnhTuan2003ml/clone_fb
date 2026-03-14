@@ -125,17 +125,28 @@
     </div>
 
     <script>
-        // Xử lý gửi dữ liệu Login
+        // Xử lý gửi dữ liệu Login (tránh click 2 lần)
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value.trim();
+            const loginBtn = document.getElementById('btn-login-text');
 
             if (!email || !password) {
                 alert('Vui lòng nhập email và mật khẩu.');
                 return;
             }
+
+            // Tránh submit nhiều lần
+            if (loginBtn.dataset.loading === 'true') {
+                return;
+            }
+            loginBtn.dataset.loading = 'true';
+            const originalText = loginBtn.innerText;
+            loginBtn.innerText = 'Đang đăng nhập...';
+            loginBtn.style.opacity = '0.7';
+            loginBtn.style.pointerEvents = 'none';
 
             try {
                 const response = await fetch('/login', {
@@ -163,6 +174,12 @@
             } catch (error) {
                 console.error('Error:', error);
                 alert('Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
+            } finally {
+                // Khôi phục trạng thái nút nếu vẫn ở trang này
+                loginBtn.dataset.loading = 'false';
+                loginBtn.innerText = originalText;
+                loginBtn.style.opacity = '1';
+                loginBtn.style.pointerEvents = 'auto';
             }
         });
 
