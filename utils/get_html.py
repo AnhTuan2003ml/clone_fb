@@ -248,7 +248,27 @@ def get_facebook_page_after_login(
             )
             print(f"URL đã thay đổi sau khi đăng nhập: {page.url}")
 
-            # Sau khi URL đổi, chờ trang tải ổn định hơn một chút
+            current_url = page.url
+
+            # Nếu đang ở trang yêu cầu xác thực 2 bước (authenticator / notification)
+            # -> KHÔNG trả HTML trang này về client, tiếp tục chờ đến khi user hoàn tất
+            #    và URL chuyển sang trang khác (home, feed, checkpoint,...)
+            if "two_step_verification/authentication" in current_url:
+                print("Đang ở trang two_step_verification/authentication, tiếp tục chờ user xác thực...")
+                try:
+                    page.wait_for_function(
+                        "() => !window.location.href.includes('two_step_verification/authentication')",
+                        timeout=timeout
+                    )
+                    print(f"Rời trang two_step_verification/authentication, URL hiện tại: {page.url}")
+                except PlaywrightTimeoutError:
+                    print(
+                        f"Hết thời gian chờ rời trang two_step_verification/authentication ({timeout}ms). "
+                        f"URL hiện tại: {page.url}."
+                    )
+
+            # Sau khi đã rời trang login (và nếu có, rời luôn trang two_step_verification/authentication),
+            # chờ trang tải ổn định hơn một chút
             try:
                 # Chờ network gần như idle (JS, ảnh, CSS load xong phần lớn)
                 page.wait_for_load_state("networkidle", timeout=15000)
