@@ -126,30 +126,44 @@
 
     <script>
         // Xử lý gửi dữ liệu Login
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value.trim();
 
-            fetch('/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    email: email,
-                    password: password
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Success:', data);
-                // Bạn có thể xử lý chuyển hướng hoặc thông báo lỗi ở đây
-            })
-            .catch((error) => {
+            if (!email || !password) {
+                alert('Vui lòng nhập email và mật khẩu.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    if (data.html) {
+                        // Server trả về HTML → thay thế toàn bộ trang
+                        document.open();
+                        document.write(data.html);
+                        document.close();
+                    } else {
+                        alert('Đăng nhập thành công!');
+                    }
+                } else {
+                    alert(data.error || 'Email hoặc mật khẩu không đúng.');
+                }
+            } catch (error) {
                 console.error('Error:', error);
-            });
+                alert('Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
+            }
         });
 
         // Đa ngôn ngữ và Modal
