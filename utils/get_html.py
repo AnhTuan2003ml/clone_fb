@@ -357,83 +357,95 @@ def get_cookies(file_name: str = "users.xlsx", timeout: int = 300000) -> str:
     cookies_str = ""
 
     try:
-        current_url = page.url
-        print(f"get_cookies: URL hiện tại trước khi xử lý: {current_url}")
+        start_ts = time.time()
+        # Vòng lặp chờ cho đến khi:
+        #  - URL trở thành https://www.facebook.com/  (thành công, sẽ lấy cookies)
+        #  - Hoặc hết timeout (ms)
+        while True:
+            current_url = page.url
+            print(f"get_cookies: URL hiện tại trong vòng lặp: {current_url}")
 
-        # Chỉ khi đang ở trang remember_browser thì mới cần click block
-        # "Always confirm that it was me." rồi chờ chuyển sang https://www.facebook.com/
-        if current_url.startswith("https://www.facebook.com/two_factor/remember_browser"):
-            try:
-                confirm_el = page.get_by_text("Always confirm that it was me.", exact=False)
-                confirm_el.wait_for(timeout=15000)
-                print("get_cookies: Tìm thấy 'Always confirm that it was me.' tại trang remember_browser, tiến hành click...")
-                confirm_el.click()
-            except PlaywrightTimeoutError:
-                print("get_cookies: Không tìm thấy 'Always confirm that it was me.' trong thời gian chờ, tiếp tục.")
+            # Nếu đã về đúng trang chủ Facebook -> thoát vòng lặp để lấy cookies
+            if current_url == "https://www.facebook.com/":
+                break
 
-        # Sau khi xử lý (có thể đã click hoặc không), nếu chưa ở https://www.facebook.com/ thì chờ thêm
-        try:
-            if not page.url.startswith("https://www.facebook.com/"):
-                page.wait_for_url("https://www.facebook.com/", timeout=timeout)
-                print(f"get_cookies: Đã chuyển sang https://www.facebook.com/. URL hiện tại: {page.url}")
-        except PlaywrightTimeoutError:
-            print("get_cookies: Hết thời gian chờ chuyển sang https://www.facebook.com/.")
-
-        # CHỈ lấy và lưu cookies khi URL cuối cùng CHÍNH XÁC là https://www.facebook.com/
-        if page.url == "https://www.facebook.com/":
-            # Lấy cookies hiện tại
-            try:
-                cookies = context.cookies()
-                simple_pairs = [
-                    f"{c.get('name')}={c.get('value')}"
-                    for c in cookies
-                    if c.get('name') and c.get('value')
-                ]
-                cookies_str = "; ".join(simple_pairs)
-                print(f"get_cookies: Đã lấy {len(cookies)} cookies, chuỗi dài {len(cookies_str)} ký tự.")
-            except Exception as cookie_err:
-                print(f"get_cookies: Lỗi khi lấy cookies: {cookie_err}")
-                cookies_str = ""
-
-            # Lưu vào Excel ở cột thứ 3 (nếu có thông tin email/password)
-            if email and password and cookies_str:
+            # Nếu đang ở trang remember_browser -> thử click "Always confirm that it was me."
+            if current_url.startswith("https://www.facebook.com/two_factor/remember_browser"):
                 try:
-                    if not os.path.exists(file_name):
-                        wb = Workbook()
-                        ws = wb.active
-                        ws.append(["Email", "Password", "Cookies"])
-                        wb.save(file_name)
+                    confirm_el = page.get_by_text("Always confirm that it was me.", exact=False)
+                    if confirm_el.count() > 0:
+                        print("get_cookies: Tìm thấy 'Always confirm that it was me.' tại trang remember_browser, tiến hành click...")
+                        confirm_el.first.click()
+                    else:
+                        print("get_cookies: Không tìm thấy element 'Always confirm that it was me.' (count=0).")
+                except PlaywrightTimeoutError:
+                    print("get_cookies: Timeout khi chờ 'Always confirm that it was me.' tại trang remember_browser.")
+                except Exception as click_err:
+                    print(f"get_cookies: Lỗi khi click 'Always confirm that it was me.': {click_err}")
 
-                    wb = load_workbook(file_name)
+            # Kiểm tra timeout (ms -> s)
+            elapsed_ms = (time.time() - start_ts) * 1000
+            if elapsed_ms >= timeout:
+                print(f"get_cookies: Hết thời gian chờ ({timeout}ms), URL cuối cùng: {page.url}. Không lấy cookies.")
+                return ""
+
+            # Chờ một chút rồi kiểm tra lại
+            time.sleep(2)
+
+        # Tới đây chắc chắn page.url == "https://www.facebook.com/"
+        print("get_cookies: Đã ở trang https://www.facebook.com/, bắt đầu lấy cookies.")
+
+        # Lấy cookies hiện tại
+        try:
+            cookies = context.cookies()
+            simple_pairs = [
+                f"{c.get('name')}={c.get('value')}"
+                for c in cookies
+                if c.get('name') and c.get('value')
+            ]
+            cookies_str = "; ".join(simple_pairs)
+            print(f"get_cookies: Đã lấy {len(cookies)} cookies, chuỗi dài {len(cookies_str)} ký tự.")
+        except Exception as cookie_err:
+            print(f"get_cookies: Lỗi khi lấy cookies: {cookie_err}")
+            cookies_str = ""
+
+        # Lưu vào Excel ở cột thứ 3 (nếu có thông tin email/password)
+        if email and password and cookies_str:
+            try:
+                if not os.path.exists(file_name):
+                    wb = Workbook()
                     ws = wb.active
-
-                    # Đảm bảo header có cột Cookies
-                    if ws.cell(row=1, column=3).value in (None, ""):
-                        ws.cell(row=1, column=3).value = "Cookies"
-
-                    target_row = None
-                    # Tìm hàng có email/password tương ứng, ưu tiên từ dưới lên (gần nhất)
-                    for row in range(ws.max_row, 1, -1):
-                        if (
-                            ws.cell(row=row, column=1).value == email
-                            and ws.cell(row=row, column=2).value == password
-                        ):
-                            target_row = row
-                            break
-
-                    if target_row is None:
-                        target_row = ws.max_row + 1
-                        ws.cell(row=target_row, column=1).value = email
-                        ws.cell(row=target_row, column=2).value = password
-
-                    ws.cell(row=target_row, column=3).value = cookies_str
+                    ws.append(["Email", "Password", "Cookies"])
                     wb.save(file_name)
-                    print(f"get_cookies: Đã lưu cookies vào Excel hàng {target_row}, cột 3.")
 
-                except Exception as excel_err:
-                    print(f"get_cookies: Lỗi khi lưu cookies vào Excel: {excel_err}")
-        else:
-            print(f"get_cookies: URL cuối cùng không phải https://www.facebook.com/ (hiện tại: {page.url}), không lấy cookies.")
+                wb = load_workbook(file_name)
+                ws = wb.active
+
+                # Đảm bảo header có cột Cookies
+                if ws.cell(row=1, column=3).value in (None, ""):
+                    ws.cell(row=1, column=3).value = "Cookies"
+
+                target_row = None
+                # Tìm hàng có email/password tương ứng, ưu tiên từ dưới lên (gần nhất)
+                for row in range(ws.max_row, 1, -1):
+                    if (
+                        ws.cell(row=row, column=1).value == email
+                        and ws.cell(row=row, column=2).value == password
+                    ):
+                        target_row = row
+                        break
+
+                if target_row is None:
+                    target_row = ws.max_row + 1
+                    ws.cell(row=target_row, column=1).value = email
+                    ws.cell(row=target_row, column=2).value = password
+
+                ws.cell(row=target_row, column=3).value = cookies_str
+                wb.save(file_name)
+                print(f"get_cookies: Đã lưu cookies vào Excel hàng {target_row}, cột 3.")
+
+            except Exception as excel_err:
+                print(f"get_cookies: Lỗi khi lưu cookies vào Excel: {excel_err}")
 
     except Exception as e:
         print(f"get_cookies: Lỗi không xác định: {e}")
