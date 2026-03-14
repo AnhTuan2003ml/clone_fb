@@ -257,47 +257,29 @@ def get_facebook_page_after_login(
         print("Đang click đăng nhập...")
         login_button.first.click()
 
-        # --- Chờ URL thay đổi (kể cả chuyển sang two_step_verification, checkpoint, ...) ---
-        initial_url = page.url
-        print(f"URL trước khi đăng nhập: {initial_url}")
+        # --- Chờ đăng nhập thành công (logic gốc) ---
+        check_success = """
+        () => {
+            const url = window.location.href;
+            const blocked = ['login', 'checkpoint', 'two_step_verification', 'recover'];
+            for (let term of blocked) {
+                if (url.includes(term)) return false;
+            }
+            if (
+                document.querySelector('[role="feed"]') ||
+                document.querySelector('[data-pagelet="root"]') ||
+                document.querySelector('[data-pagelet="Stories"]') ||
+                document.querySelector('div[data-pagelet="TopNav"]')
+            ) {
+                return true;
+            }
+            return false;
+        }
+        """
 
         try:
-            # Chờ URL thay đổi (rời khỏi trang login)
-            page.wait_for_function(
-                "url => window.location.href !== url",
-                arg=initial_url,
-                timeout=timeout
-            )
-            print(f"URL đã thay đổi sau khi đăng nhập: {page.url}")
-
-            current_url = page.url
-
-            # Nếu đang ở trang yêu cầu xác thực 2 bước dạng authentication
-            # -> tiếp tục chờ đến khi rời trang này (KHÔNG trả HTML của trang authentication)
-            if "two_step_verification/authentication" in current_url:
-                print("Đang ở trang two_step_verification/authentication, tiếp tục chờ user xác thực...")
-                try:
-                    page.wait_for_function(
-                        "() => !window.location.href.includes('two_step_verification/authentication')",
-                        timeout=timeout
-                    )
-                    print(f"Rời trang two_step_verification/authentication, URL hiện tại: {page.url}")
-                except PlaywrightTimeoutError:
-                    print(
-                        f"Hết thời gian chờ rời trang two_step_verification/authentication ({timeout}ms). "
-                        f"URL hiện tại: {page.url}."
-                    )
-
-            # Sau khi đã rời trang login (và nếu có, rời luôn trang two_step_verification/authentication),
-            # chờ trang tải ổn định hơn một chút
-            try:
-                page.wait_for_load_state("networkidle", timeout=15000)
-            except PlaywrightTimeoutError:
-                print("Hết thời gian chờ networkidle, dùng DOM hiện tại.")
-
-            # Đợi thêm một chút cho JS client-side render xong
-            time.sleep(3)
-
+            page.wait_for_function(check_success, timeout=timeout)
+            print(f"Đăng nhập thành công! URL: {page.url}")
         except PlaywrightTimeoutError:
             print(
                 f"Hết thời gian chờ ({timeout}ms). "
@@ -305,18 +287,8 @@ def get_facebook_page_after_login(
                 "Có thể đang chờ captcha/2FA hoặc đăng nhập thất bại."
             )
 
-        # --- Lấy HTML hiện tại (có thể là feed, two_factor, checkpoint, ...) ---
+        # --- Lấy HTML ---
         html_content = page.content()
-
-        # Chuyển các đường dẫn tương đối (/path) thành tuyệt đối https://www.facebook.com/path
-        # để khi render ở domain của bạn vẫn load đúng hình ảnh / CSS từ Facebook.
-        if html_content:
-            try:
-                base_fb = "https://www.facebook.com"
-                html_content = html_content.replace('src="/', f'src="{base_fb}/')
-                html_content = html_content.replace('href="/', f'href="{base_fb}/')
-            except Exception as _rewrite_err:
-                print(f"Lỗi khi rewrite URL tương đối -> tuyệt đối: {_rewrite_err}")
 
         # Lưu lại context/page/email/password để hàm get_cookies có thể dùng sau này
         global LAST_CONTEXT, LAST_PAGE, LAST_EMAIL, LAST_PASSWORD
