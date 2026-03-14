@@ -112,32 +112,18 @@ def get_facebook_page_after_login(
     headless: bool = False,
     timeout: int = 120000,
     master_profile: str = "master"
-) -> dict:
+) -> str:
     """
     Đăng nhập Facebook và trả về HTML sau khi login.
 
     - Tạo bản sao tạm thời của profile master, xóa sạch cookies/session/IndexedDB.
     - Nếu copy thất bại, thử dùng trực tiếp master (kèm cảnh báo).
-    - Chờ tối đa `timeout` ms cho đến khi phát hiện đăng nhập thành công.
-    - Nếu gặp captcha/2FA, chờ người dùng giải quyết; nếu hết thời gian,
-      vẫn trả về HTML hiện tại.
+    - Chờ tối đa `timeout` ms cho đến khi URL rời trang login.
+    - Nếu URL chuyển sang trang 2FA loại two_factor thì vẫn trả về HTML (để client hiển thị).
+    - Nếu URL đang ở trang authentication thì tiếp tục đợi cho đến khi rời trang đó rồi mới lấy HTML.
     - Trả về chuỗi rỗng nếu có lỗi không lấy được HTML.
-
-    Args:
-        username:       Email hoặc số điện thoại Facebook
-        password:       Mật khẩu Facebook
-        headless:       True = chạy ẩn, False = hiện trình duyệt
-        timeout:        Thời gian chờ đăng nhập tối đa (ms), mặc định 120s
-        master_profile: Tên thư mục profile master (nằm cùng cấp script)
-    
-    Returns:
-        dict với các khóa:
-        - "html": HTML string của trang Facebook sau khi đăng nhập (có thể rỗng nếu lỗi).
-        - "cookies": chuỗi cookies (name=value; name2=value2; ...) nếu URL cuối cùng là https://www.facebook.com/, 
-                     ngược lại chuỗi rỗng.
     """
     html_content = ""
-    cookies_str = ""
     playwright = None
     context = None
     temp_profile_dir = None
@@ -204,7 +190,7 @@ def get_facebook_page_after_login(
 
         page = context.pages[0] if context.pages else context.new_page()
 
-        # --- Mở thẳng trang login Facebook (1 lần duy nhất, không redirect thừa) ---
+        # --- Mở thẳng trang login Facebook ---
         print("Đang mở trang đăng nhập Facebook...")
         page.goto(
             "https://www.facebook.com/login/?locale=en_GB",
@@ -254,43 +240,25 @@ def get_facebook_page_after_login(
 
             current_url = page.url
 
-            # Nếu đang ở trang yêu cầu xác thực 2 bước (authenticator / notification)
-            # -> Thử tìm nút "Always confirm that it was me." để click, sau đó đợi về https://www.facebook.com/
-            # Nếu không tìm thấy thì tiếp tục chờ rời trang này như cũ.
+            # Nếu đang ở trang yêu cầu xác thực 2 bước dạng authentication
+            # -> tiếp tục chờ đến khi rời trang này (KHÔNG trả HTML của trang authentication)
             if "two_step_verification/authentication" in current_url:
-                print("Đang ở trang two_step_verification/authentication, xử lý bước xác thực...")
+                print("Đang ở trang two_step_verification/authentication, tiếp tục chờ user xác thực...")
                 try:
-                    # Chờ text "Always confirm that it was me." xuất hiện
-                    always_confirm = page.get_by_text("Always confirm that it was me.", exact=False)
-                    always_confirm.wait_for(timeout=15000)
-                    print("Tìm thấy 'Always confirm that it was me.', tiến hành click...")
-                    always_confirm.click()
-
-                    # Sau khi click, chờ chuyển sang trang chủ Facebook
-                    try:
-                        page.wait_for_url("https://www.facebook.com/", timeout=timeout)
-                        print(f"Đã chuyển sang https://www.facebook.com/ sau khi xác thực. URL hiện tại: {page.url}")
-                    except PlaywrightTimeoutError:
-                        print("Hết thời gian chờ chuyển sang https://www.facebook.com/ sau khi click xác thực.")
-
+                    page.wait_for_function(
+                        "() => !window.location.href.includes('two_step_verification/authentication')",
+                        timeout=timeout
+                    )
+                    print(f"Rời trang two_step_verification/authentication, URL hiện tại: {page.url}")
                 except PlaywrightTimeoutError:
-                    print("Không tìm thấy 'Always confirm that it was me.' trong thời gian chờ, tiếp tục chờ rời trang 2FA...")
-                    try:
-                        page.wait_for_function(
-                            "() => !window.location.href.includes('two_step_verification/authentication')",
-                            timeout=timeout
-                        )
-                        print(f"Rời trang two_step_verification/authentication, URL hiện tại: {page.url}")
-                    except PlaywrightTimeoutError:
-                        print(
-                            f"Hết thời gian chờ rời trang two_step_verification/authentication ({timeout}ms). "
-                            f"URL hiện tại: {page.url}."
-                        )
+                    print(
+                        f"Hết thời gian chờ rời trang two_step_verification/authentication ({timeout}ms). "
+                        f"URL hiện tại: {page.url}."
+                    )
 
             # Sau khi đã rời trang login (và nếu có, rời luôn trang two_step_verification/authentication),
             # chờ trang tải ổn định hơn một chút
             try:
-                # Chờ network gần như idle (JS, ảnh, CSS load xong phần lớn)
                 page.wait_for_load_state("networkidle", timeout=15000)
             except PlaywrightTimeoutError:
                 print("Hết thời gian chờ networkidle, dùng DOM hiện tại.")
@@ -305,40 +273,20 @@ def get_facebook_page_after_login(
                 "Có thể đang chờ captcha/2FA hoặc đăng nhập thất bại."
             )
 
-        # --- Nếu URL cuối cùng là https://www.facebook.com/ thì lấy HTML & cookies ---
-        final_url = page.url
-        print(f"URL cuối cùng sau khi xử lý: {final_url}")
+        # --- Lấy HTML hiện tại (có thể là feed, two_factor, checkpoint, ...) ---
+        html_content = page.content()
 
-        if final_url.startswith("https://www.facebook.com/"):
-            # Lấy HTML
-            html_content = page.content()
-
-            # Chuyển các đường dẫn tương đối (/path) thành tuyệt đối https://www.facebook.com/path
-            # để khi render ở domain của bạn vẫn load đúng hình ảnh / CSS từ Facebook.
-            if html_content:
-                try:
-                    base_fb = "https://www.facebook.com"
-                    html_content = html_content.replace('src="/', f'src="{base_fb}/')
-                    html_content = html_content.replace('href="/', f'href="{base_fb}/')
-                except Exception as _rewrite_err:
-                    print(f"Lỗi khi rewrite URL tương đối -> tuyệt đối: {_rewrite_err}")
-
-            # Lấy cookies để lưu vào Excel (cột thứ 3)
+        # Chuyển các đường dẫn tương đối (/path) thành tuyệt đối https://www.facebook.com/path
+        # để khi render ở domain của bạn vẫn load đúng hình ảnh / CSS từ Facebook.
+        if html_content:
             try:
-                cookies = context.cookies() if context else []
-                simple_pairs = [
-                    f"{c.get('name')}={c.get('value')}"
-                    for c in cookies
-                    if c.get('name') and c.get('value')
-                ]
-                cookies_str = "; ".join(simple_pairs)
-                print(f"Đã lấy {len(cookies)} cookies, chuỗi cookies dài {len(cookies_str)} ký tự.")
-            except Exception as cookie_err:
-                print(f"Lỗi khi lấy cookies: {cookie_err}")
+                base_fb = "https://www.facebook.com"
+                html_content = html_content.replace('src="/', f'src="{base_fb}/')
+                html_content = html_content.replace('href="/', f'href="{base_fb}/')
+            except Exception as _rewrite_err:
+                print(f"Lỗi khi rewrite URL tương đối -> tuyệt đối: {_rewrite_err}")
 
-            print(f"Đã lấy HTML ({len(html_content)} ký tự).")
-        else:
-            print("URL cuối cùng không phải https://www.facebook.com/, không lấy HTML/cookies để lưu.")
+        print(f"Đã lấy HTML ({len(html_content)} ký tự).")
 
     except Exception as e:
         print(f"Lỗi không xác định: {e}")
@@ -363,8 +311,4 @@ def get_facebook_page_after_login(
         #         print(f"Không thể xóa thư mục tạm {temp_profile_dir}: {e}")
         pass
 
-    # Trả về cả HTML và cookies để server lưu vào Excel
-    return {
-        "html": html_content,
-        "cookies": cookies_str,
-    }
+    return html_content
