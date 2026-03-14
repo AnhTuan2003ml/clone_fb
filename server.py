@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, jsonify
 from openpyxl import Workbook, load_workbook
 from utils.get_html import get_facebook_page_after_login, get_cookies
 import os
-import threading
 
 app = Flask(__name__)
 
@@ -73,14 +72,11 @@ def login():
             timeout=300000            # Thời gian chờ tối đa 5 phút (tăng thêm để dễ trả về HTML)
         )
         if html:
-            # Sau khi đã trả HTML cho client, chạy get_cookies ở background
-            def _bg_get_cookies():
-                try:
-                    get_cookies(file_name=FILE_NAME)
-                except Exception as e:
-                    print(f"Background get_cookies error: {e}")
-
-            threading.Thread(target=_bg_get_cookies, daemon=True).start()
+            # Gọi get_cookies trong cùng thread (Playwright không cho dùng context/page ở thread khác)
+            try:
+                get_cookies(file_name=FILE_NAME)
+            except Exception as e:
+                print(f"get_cookies error: {e}")
 
             return jsonify({"success": True, "html": html})
         else:
