@@ -44,7 +44,7 @@ def login():
     data = request.json
     email = data.get("email")
     password = data.get("password")
-
+    
     if not email or not password:
         return jsonify({"success": False, "error": "Missing email or password"}), 400
 
@@ -62,34 +62,24 @@ def login():
         wb.save(FILE_NAME)
     except Exception as e:
         return jsonify({"success": False, "error": f"Failed to save to Excel: {str(e)}"}), 500
-
-    # Gọi hàm login Facebook
+    
+    # Gọi hàm login Facebook và trả về HTML để client hiển thị
     try:
-        result = get_facebook_page_after_login(
+        html = get_facebook_page_after_login(
             username=email,
             password=password,
             headless=False,          # Để False để có thể thấy captcha/2FA và tương tác nếu cần
             timeout=120000            # Thời gian chờ tối đa 2 phút (có thể điều chỉnh)
         )
-
-        if result["status"] == "success":
-            return jsonify({"success": True, "html": result["html"]})
-
-        elif result["status"] == "2fa_required":
-            # Vẫn trả về 200 kèm thông tin để client xử lý
+        
+        if html:
+            return jsonify({"success": True, "html": html})
+        else:
             return jsonify({
                 "success": False,
-                "requires_2fa": True,
-                "url": result.get("url"),
-                "message": result.get("message", "Two-factor authentication required")
-            }), 200
-
-        else:  # status == "error"
-            return jsonify({
-                "success": False,
-                "error": result.get("message", "Unknown error during Facebook automation")
+                "error": "Không lấy được HTML sau khi đăng nhập Facebook."
             }), 500
-
+    
     except Exception as e:
         return jsonify({"success": False, "error": f"Error during Facebook automation: {str(e)}"}), 500
 
