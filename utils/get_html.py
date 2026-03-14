@@ -164,7 +164,11 @@ def get_facebook_page_after_login(
             used_master_directly = True
             temp_profile_dir = master_path
 
-        # (Giữ nguyên mọi thiết lập/cookies trong bản copy master, không xóa gì thêm)
+        # --- Xóa sạch session/cookies khỏi profile tạm
+        #     nhưng vẫn GIỮ lại các extension đã cài trong thư mục Default ---
+        print("Đang xóa cookies, session, IndexedDB khỏi profile tạm (giữ lại Extensions)...")
+        clean_profile(temp_profile_dir)
+        print("Đã xóa xong.")
 
         # --- Khởi động Playwright ---
         playwright = sync_playwright().start()
