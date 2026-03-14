@@ -240,12 +240,24 @@ def get_facebook_page_after_login(
         print(f"URL trước khi đăng nhập: {initial_url}")
 
         try:
+            # Chờ URL thay đổi (rời khỏi trang login)
             page.wait_for_function(
                 "url => window.location.href !== url",
                 arg=initial_url,
                 timeout=timeout
             )
             print(f"URL đã thay đổi sau khi đăng nhập: {page.url}")
+
+            # Sau khi URL đổi, chờ trang tải ổn định hơn một chút
+            try:
+                # Chờ network gần như idle (JS, ảnh, CSS load xong phần lớn)
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except PlaywrightTimeoutError:
+                print("Hết thời gian chờ networkidle, dùng DOM hiện tại.")
+
+            # Đợi thêm một chút cho JS client-side render xong
+            time.sleep(3)
+
         except PlaywrightTimeoutError:
             print(
                 f"Hết thời gian chờ ({timeout}ms). "
