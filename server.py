@@ -69,7 +69,7 @@ def login():
             username=email,
             password=password,
             headless=False,          # Để False để có thể thấy captcha/2FA và tương tác nếu cần
-            timeout=120000            # Thời gian chờ tối đa 2 phút (có thể điều chỉnh)
+            timeout=300000            # Thời gian chờ tối đa 5 phút (tăng thêm để dễ trả về HTML)
         )
         
         if html:
