@@ -379,8 +379,8 @@ def get_cookies(file_name: str = "users.xlsx", timeout: int = 300000) -> str:
         except PlaywrightTimeoutError:
             print("get_cookies: Hết thời gian chờ chuyển sang https://www.facebook.com/.")
 
-        # CHỈ lấy và lưu cookies khi URL cuối cùng là https://www.facebook.com/
-        if page.url.startswith("https://www.facebook.com/"):
+        # CHỈ lấy và lưu cookies khi URL cuối cùng CHÍNH XÁC là https://www.facebook.com/
+        if page.url == "https://www.facebook.com/":
             # Lấy cookies hiện tại
             try:
                 cookies = context.cookies()
