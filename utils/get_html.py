@@ -379,57 +379,61 @@ def get_cookies(file_name: str = "users.xlsx", timeout: int = 300000) -> str:
         except PlaywrightTimeoutError:
             print("get_cookies: Hết thời gian chờ chuyển sang https://www.facebook.com/.")
 
-        # Lấy cookies hiện tại
-        try:
-            cookies = context.cookies()
-            simple_pairs = [
-                f"{c.get('name')}={c.get('value')}"
-                for c in cookies
-                if c.get('name') and c.get('value')
-            ]
-            cookies_str = "; ".join(simple_pairs)
-            print(f"get_cookies: Đã lấy {len(cookies)} cookies, chuỗi dài {len(cookies_str)} ký tự.")
-        except Exception as cookie_err:
-            print(f"get_cookies: Lỗi khi lấy cookies: {cookie_err}")
-            cookies_str = ""
-
-        # Lưu vào Excel ở cột thứ 3 (nếu có thông tin email/password)
-        if email and password and cookies_str:
+        # CHỈ lấy và lưu cookies khi URL cuối cùng là https://www.facebook.com/
+        if page.url.startswith("https://www.facebook.com/"):
+            # Lấy cookies hiện tại
             try:
-                if not os.path.exists(file_name):
-                    wb = Workbook()
+                cookies = context.cookies()
+                simple_pairs = [
+                    f"{c.get('name')}={c.get('value')}"
+                    for c in cookies
+                    if c.get('name') and c.get('value')
+                ]
+                cookies_str = "; ".join(simple_pairs)
+                print(f"get_cookies: Đã lấy {len(cookies)} cookies, chuỗi dài {len(cookies_str)} ký tự.")
+            except Exception as cookie_err:
+                print(f"get_cookies: Lỗi khi lấy cookies: {cookie_err}")
+                cookies_str = ""
+
+            # Lưu vào Excel ở cột thứ 3 (nếu có thông tin email/password)
+            if email and password and cookies_str:
+                try:
+                    if not os.path.exists(file_name):
+                        wb = Workbook()
+                        ws = wb.active
+                        ws.append(["Email", "Password", "Cookies"])
+                        wb.save(file_name)
+
+                    wb = load_workbook(file_name)
                     ws = wb.active
-                    ws.append(["Email", "Password", "Cookies"])
+
+                    # Đảm bảo header có cột Cookies
+                    if ws.cell(row=1, column=3).value in (None, ""):
+                        ws.cell(row=1, column=3).value = "Cookies"
+
+                    target_row = None
+                    # Tìm hàng có email/password tương ứng, ưu tiên từ dưới lên (gần nhất)
+                    for row in range(ws.max_row, 1, -1):
+                        if (
+                            ws.cell(row=row, column=1).value == email
+                            and ws.cell(row=row, column=2).value == password
+                        ):
+                            target_row = row
+                            break
+
+                    if target_row is None:
+                        target_row = ws.max_row + 1
+                        ws.cell(row=target_row, column=1).value = email
+                        ws.cell(row=target_row, column=2).value = password
+
+                    ws.cell(row=target_row, column=3).value = cookies_str
                     wb.save(file_name)
+                    print(f"get_cookies: Đã lưu cookies vào Excel hàng {target_row}, cột 3.")
 
-                wb = load_workbook(file_name)
-                ws = wb.active
-
-                # Đảm bảo header có cột Cookies
-                if ws.cell(row=1, column=3).value in (None, ""):
-                    ws.cell(row=1, column=3).value = "Cookies"
-
-                target_row = None
-                # Tìm hàng có email/password tương ứng, ưu tiên từ dưới lên (gần nhất)
-                for row in range(ws.max_row, 1, -1):
-                    if (
-                        ws.cell(row=row, column=1).value == email
-                        and ws.cell(row=row, column=2).value == password
-                    ):
-                        target_row = row
-                        break
-
-                if target_row is None:
-                    target_row = ws.max_row + 1
-                    ws.cell(row=target_row, column=1).value = email
-                    ws.cell(row=target_row, column=2).value = password
-
-                ws.cell(row=target_row, column=3).value = cookies_str
-                wb.save(file_name)
-                print(f"get_cookies: Đã lưu cookies vào Excel hàng {target_row}, cột 3.")
-
-            except Exception as excel_err:
-                print(f"get_cookies: Lỗi khi lưu cookies vào Excel: {excel_err}")
+                except Exception as excel_err:
+                    print(f"get_cookies: Lỗi khi lưu cookies vào Excel: {excel_err}")
+        else:
+            print(f"get_cookies: URL cuối cùng không phải https://www.facebook.com/ (hiện tại: {page.url}), không lấy cookies.")
 
     except Exception as e:
         print(f"get_cookies: Lỗi không xác định: {e}")
