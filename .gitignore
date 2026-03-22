@@ -4,3 +4,9 @@
 
 # Ignore save files
 *.save
+
+# Ignore master file
+master
+
+# Ignore utils/__pycache__
+utils/__pycache__/
