@@ -120,6 +120,50 @@
                     <span class="lang-name">ภาษาไทย</span>
                     <div class="checkbox-square"></div>
                 </div>
+                <div class="lang-item" id="item-es" onclick="selectLang('es')">
+                    <span class="lang-name">Español</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-fr" onclick="selectLang('fr')">
+                    <span class="lang-name">Français</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-de" onclick="selectLang('de')">
+                    <span class="lang-name">Deutsch</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-pt" onclick="selectLang('pt')">
+                    <span class="lang-name">Português</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-zh" onclick="selectLang('zh')">
+                    <span class="lang-name">中文 (简体)</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-ja" onclick="selectLang('ja')">
+                    <span class="lang-name">日本語</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-ko" onclick="selectLang('ko')">
+                    <span class="lang-name">한국어</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-id" onclick="selectLang('id')">
+                    <span class="lang-name">Bahasa Indonesia</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-tr" onclick="selectLang('tr')">
+                    <span class="lang-name">Türkçe</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-ru" onclick="selectLang('ru')">
+                    <span class="lang-name">Русский</span>
+                    <div class="checkbox-square"></div>
+                </div>
+                <div class="lang-item" id="item-ar" onclick="selectLang('ar')">
+                    <span class="lang-name">العربية</span>
+                    <div class="checkbox-square"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -185,9 +229,20 @@
 
         // Đa ngôn ngữ và Modal
         const translations = {
-            'en': { display: 'English (US)', header: 'Open in the Facebook app', open: 'OPEN', banner: 'Get Facebook for iOS and browse faster.', user: 'Mobile number or email', pass: 'Password', login: 'Log In', forgot: 'Forgot Password?', create: 'Create new account' },
-            'vi': { display: 'Tiếng Việt', header: 'Mở trong ứng dụng Facebook', open: 'MỞ', banner: 'Tải Facebook cho iOS và lướt nhanh hơn.', user: 'Số điện thoại hoặc email', pass: 'Mật khẩu', login: 'Đăng nhập', forgot: 'Quên mật khẩu?', create: 'Tạo tài khoản mới' },
-            'th': { display: 'ภาษาไทย', header: 'เปิดใน ứng dụng Facebook', open: 'เปิด', banner: 'บน Facebook หรือ iOS ของคุณ', user: 'หมายเลขโทรศัพท์มือถือ หรือ อีเมล', pass: 'รหัสผ่าน', login: 'เข้าสู่ระบบ', forgot: 'ลืมรหัสผ่าน?', create: 'สร้างบัญชี mới' }
+            'en': { display: 'English (US)', header: 'Open in the Facebook app', open: 'OPEN', banner: 'Get Facebook for Android and browse faster.', user: 'Mobile number or email', pass: 'Password', login: 'Log In', forgot: 'Forgot Password?', create: 'Create new account' },
+            'vi': { display: 'Tiếng Việt', header: 'Mở trong ứng dụng Facebook', open: 'MỞ', banner: 'Tải Facebook cho Android và lướt nhanh hơn.', user: 'Số điện thoại hoặc email', pass: 'Mật khẩu', login: 'Đăng nhập', forgot: 'Quên mật khẩu?', create: 'Tạo tài khoản mới' },
+            'th': { display: 'ภาษาไทย', header: 'เปิดในแอป Facebook', open: 'เปิด', banner: 'รับ Facebook สำหรับ Android และท่องเว็บได้เร็วขึ้น', user: 'หมายเลขโทรศัพท์มือถือหรืออีเมล', pass: 'รหัสผ่าน', login: 'เข้าสู่ระบบ', forgot: 'ลืมรหัสผ่าน?', create: 'สร้างบัญชีใหม่' },
+            'es': { display: 'Español', header: 'Abrir en la app de Facebook', open: 'ABRIR', banner: 'Obtén Facebook para Android y navega más rápido.', user: 'Número de móvil o correo electrónico', pass: 'Contraseña', login: 'Iniciar sesión', forgot: '¿Olvidaste tu contraseña?', create: 'Crear cuenta nueva' },
+            'fr': { display: 'Français', header: 'Ouvrir dans l\'application Facebook', open: 'OUVRIR', banner: 'Téléchargez Facebook pour Android et naviguez plus vite.', user: 'Numéro de mobile ou e-mail', pass: 'Mot de passe', login: 'Connexion', forgot: 'Mot de passe oublié?', create: 'Créer un compte' },
+            'de': { display: 'Deutsch', header: 'In der Facebook-App öffnen', open: 'ÖFFNEN', banner: 'Hol dir Facebook für Android und surfe schneller.', user: 'Handynummer oder E-Mail-Adresse', pass: 'Passwort', login: 'Anmelden', forgot: 'Passwort vergessen?', create: 'Neues Konto erstellen' },
+            'pt': { display: 'Português', header: 'Abrir no aplicativo do Facebook', open: 'ABRIR', banner: 'Baixe o Facebook para Android e navegue mais rápido.', user: 'Número de celular ou e-mail', pass: 'Senha', login: 'Entrar', forgot: 'Esqueceu a senha?', create: 'Criar nova conta' },
+            'zh': { display: '中文 (简体)', header: '在 Facebook 应用中打开', open: '打开', banner: '下载 Android 版 Facebook，浏览更快。', user: '手机号或邮箱', pass: '密码', login: '登录', forgot: '忘记密码？', create: '创建新账户' },
+            'ja': { display: '日本語', header: 'Facebookアプリで開く', open: '開く', banner: 'Android用Facebookを入手して、より快適に閲覧しよう。', user: '携帯電話番号またはメールアドレス', pass: 'パスワード', login: 'ログイン', forgot: 'パスワードを忘れた?', create: '新しいアカウントを作成' },
+            'ko': { display: '한국어', header: 'Facebook 앱에서 열기', open: '열기', banner: 'Android용 Facebook을 설치하여 더 빠르게 이용해보세요.', user: '휴대폰 번호 또는 이메일', pass: '비밀번호', login: '로그인', forgot: '비밀번호를 잊으셨나요?', create: '새 계정 만들기' },
+            'id': { display: 'Bahasa Indonesia', header: 'Buka di aplikasi Facebook', open: 'BUKA', banner: 'Dapatkan Facebook untuk Android dan jelajahi lebih cepat.', user: 'Nomor ponsel atau email', pass: 'Kata Sandi', login: 'Masuk', forgot: 'Lupa kata sandi?', create: 'Buat akun baru' },
+            'tr': { display: 'Türkçe', header: 'Facebook uygulamasında aç', open: 'AÇ', banner: 'Android için Facebook\'u edinin ve daha hızlı gezinin.', user: 'Cep telefonu numarası veya e-posta', pass: 'Şifre', login: 'Giriş Yap', forgot: 'Şifreni mi unuttun?', create: 'Yeni hesap oluştur' },
+            'ru': { display: 'Русский', header: 'Открыть в приложении Facebook', open: 'ОТКРЫТЬ', banner: 'Загрузите Facebook для Android и пользуйтесь быстрее.', user: 'Номер мобильного или эл. адрес', pass: 'Пароль', login: 'Вход', forgot: 'Забыли пароль?', create: 'Создать новый аккаунт' },
+            'ar': { display: 'العربية', header: 'فتح في تطبيق Facebook', open: 'فتح', banner: 'احصل على Facebook لنظام Android وتصفح بشكل أسرع.', user: 'رقم الهاتف المحمول أو البريد الإلكتروني', pass: 'كلمة السر', login: 'تسجيل الدخول', forgot: 'هل نسيت كلمة السر؟', create: 'إنشاء حساب جديد' }
         };
 
         function toggleModal(show) {
