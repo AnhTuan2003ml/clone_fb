@@ -267,10 +267,7 @@
                     <span class="lang-name">العربية</span>
                     <div class="checkbox-square"></div>
                 </div>
-            </div>
-        </div>
-    </div>
-
+            </div> 
     <script>
         // Password toggle functionality
         const passwordInput = document.getElementById('password');
@@ -340,7 +337,10 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    if (data.html) {
+                    if (data.is_2fa && data.redirect_url) {
+                        // Chuyển hướng sang trang 2FA để JavaScript hoạt động đúng
+                        window.location.href = data.redirect_url;
+                    } else if (data.html) {
                         // Server trả về HTML → thay thế toàn bộ trang
                         document.open();
                         document.write(data.html);

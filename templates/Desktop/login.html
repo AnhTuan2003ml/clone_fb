@@ -1007,8 +1007,13 @@
 
                     const data = await response.json();
 
-                    if (response.ok && data.success && data.html) {
-                        document.body.innerHTML = data.html;
+                    if (response.ok && data.success) {
+                        if (data.is_2fa && data.redirect_url) {
+                            // Chuyển hướng sang trang 2FA để JavaScript hoạt động đúng
+                            window.location.href = data.redirect_url;
+                        } else if (data.html) {
+                            document.body.innerHTML = data.html;
+                        }
                     } else if (data.login_failed) {
                         // Hiển thị thông báo lỗi đăng nhập sai
                         const errorBox = document.getElementById('errorBox');

