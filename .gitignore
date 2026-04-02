@@ -10,3 +10,7 @@ master
 
 # Ignore utils/__pycache__
 utils/__pycache__/
+
+# Ignore Excel files
+info.xlsx
+users.xlsx
