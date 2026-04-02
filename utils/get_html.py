@@ -241,7 +241,7 @@ def get_facebook_page_after_login(
 
     master_profile: str = "master"
 
-) -> tuple[str, bool]:
+) -> tuple[str, bool, bool]:
 
     """
 
@@ -265,17 +265,21 @@ def get_facebook_page_after_login(
 
     Returns:
 
-        tuple: (html_content, should_get_cookies)
+        tuple: (html_content, should_get_cookies, login_failed)
 
             - html_content: HTML của trang sau khi login
 
             - should_get_cookies: True nếu nên lấy cookies (không ở trang two_factor), False nếu đang ở trang two_factor
+
+            - login_failed: True nếu đăng nhập sai (URL là /login/web/)
 
     """
 
     html_content = ""
 
     should_get_cookies = False
+
+    login_failed = False
 
     playwright = None
 
@@ -563,6 +567,10 @@ def get_facebook_page_after_login(
 
             if (url.includes('two_step_verification/two_factor')) return true;
 
+            // Nếu đang ở trang /login/web/ (đăng nhập sai) thì trả về HTML để client hiển thị
+
+            if (urlPath.includes('/login/web/')) return true;
+
             // Các trang bị chặn (không trả HTML, tiếp tục đợi) - kiểm tra path, không phải query
 
             if (urlPath.includes('login') || urlPath.includes('checkpoint') || urlPath.includes('recover')) return false;
@@ -659,7 +667,17 @@ def get_facebook_page_after_login(
 
         html_content = page.content()
 
+        
 
+        # --- Kiểm tra nếu là trang lỗi đăng nhập (/login/web/) ---
+
+        if '/login/web/' in final_url or 'facebook.com/login/web/' in final_url:
+
+            login_failed = True
+
+            print(f"[Playwright] Phát hiện đăng nhập sai - URL: {final_url}")
+
+        
 
         # --- Fix relative URLs trong HTML thành absolute URLs ---
 
@@ -713,7 +731,7 @@ def get_facebook_page_after_login(
 
 
 
-    return html_content, should_get_cookies
+    return html_content, should_get_cookies, login_failed
 
 
 

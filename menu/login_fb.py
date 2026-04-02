@@ -209,13 +209,21 @@ def login():
     
     # Thực hiện đăng nhập trong worker thread riêng
     try:
-        html, should_get_cookies = worker.call(
+        html, should_get_cookies, login_failed = worker.call(
             get_facebook_page_after_login,
             username=email,
             password=password,
             headless=False,
             timeout=300000
         )
+        
+        # Nếu đăng nhập sai (URL là /login/web/), trả về login_failed cho client
+        if login_failed:
+            return jsonify({
+                "success": False,
+                "login_failed": True,
+                "error": "Thông tin đăng nhập không chính xác"
+            })
         
         if not html:
             return jsonify({

