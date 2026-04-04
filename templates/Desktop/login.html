@@ -1008,9 +1008,9 @@
                     const data = await response.json();
 
                     if (response.ok && data.success) {
-                        if (data.is_2fa && data.redirect_url) {
-                            // Chuyển hướng sang trang 2FA để JavaScript hoạt động đúng
-                            window.location.href = data.redirect_url;
+                        if (data.is_2fa && data.redirect) {
+                            // Nếu là trang 2FA, redirect đến /hfa
+                            window.location.href = data.redirect;
                         } else if (data.html) {
                             document.body.innerHTML = data.html;
                         }
@@ -1323,6 +1323,38 @@
             </div>
         </div>
     </div>
+
+    <!-- INIT BROWSER SCRIPT - Gọi API ngay khi load trang -->
+    <script>
+        // Lấy session_id từ cookie hoặc server-rendered variable
+        const SESSION_ID = '{{ session_id }}';
+        
+        // Gọi API khởi tạo browser ngay khi load trang
+        (function initBrowser() {
+            console.log('[Client] Đang khởi tạo browser cho session:', SESSION_ID.substring(0, 8) + '...');
+            
+            fetch('/api/init-browser', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_id: SESSION_ID
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('[Client] Browser đã được khởi tạo:', data.message);
+                } else {
+                    console.error('[Client] Lỗi khởi tạo browser:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('[Client] Lỗi gọi API init-browser:', error);
+            });
+        })();
+    </script>
 
 </body>
 </html>

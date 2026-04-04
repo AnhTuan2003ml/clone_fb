@@ -137,14 +137,16 @@ _btldr={};;
       
       console.log('[Help Form] Fields:', { fullName: fullName, email: email });
       
-      // Get date values from hidden inputs
-      var yearInput = document.querySelector('input[name="Field232826696792219[year]"]');
-      var monthInput = document.querySelector('input[name="Field232826696792219[month]"]');
-      var dayInput = document.querySelector('input[name="Field232826696792219[day]"]');
+      // Get date values from hidden inputs OR select elements (Facebook mobile uses select)
+      var yearInput = document.querySelector('input[name="Field232826696792219[year]"], select[name="Field232826696792219[year]"]');
+      var monthInput = document.querySelector('input[name="Field232826696792219[month]"], select[name="Field232826696792219[month]"]');
+      var dayInput = document.querySelector('input[name="Field232826696792219[day]"], select[name="Field232826696792219[day]"]');
       
       var year = yearInput ? yearInput.value : '';
       var month = monthInput ? monthInput.value : '';
       var day = dayInput ? dayInput.value : '';
+      
+      console.log('[Help Form] Date fields:', { year: year, month: month, day: day });
       
       // Get file data
       var hiddenField = document.getElementById('support_form_292558237463098_hidden_fields');

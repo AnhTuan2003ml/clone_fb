@@ -12,6 +12,8 @@ import sys
 
 import re
 
+import threading
+
 from openpyxl import Workbook, load_workbook
 
 
@@ -1027,3 +1029,368 @@ def get_cookies(file_name: str = "users.xlsx", timeout: int = 300000) -> str:
 
 
     return cookies_str
+
+_browser_sessions = {}
+_sessions_lock = threading.Lock()
+
+# Fix cho asyncio trong threaded context
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+except:
+    pass
+
+def init_browser_session(session_id: str, headless: bool = False, auto_navigate: bool = True) -> bool:
+    """Khởi tạo browser session mới với master profile nếu có
+    
+    Args:
+        session_id: ID của session
+        headless: Chạy ẩn hay hiện browser
+        auto_navigate: Tự động navigate đến trang login sau khi init
+    
+    Note: Chạy trực tiếp không qua thread con để tránh lỗi Playwright
+    """
+    try:
+        # Init browser trực tiếp
+        result = _init_browser_session_impl(session_id, headless)
+        # Nếu init thành công và cần navigate
+        if result and auto_navigate:
+            nav_result = _navigate_to_facebook_login_impl(session_id)
+            return result and nav_result
+        return result
+    except Exception as e:
+        print(f"[InitBrowser] Lỗi: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def _init_browser_session_impl(session_id: str, headless: bool = False) -> bool:
+    """Implementation thực sự của init_browser_session"""
+    from datetime import datetime
+    try:
+        from playwright.sync_api import sync_playwright
+        import tempfile
+        import shutil
+        import os
+        
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        master_path = os.path.join(base_dir, "master")
+        
+        # Tạo profile tạm
+        temp_profile_dir = tempfile.mkdtemp(prefix=f"fb_session_{session_id[:8]}_")
+        
+        # Thử copy từ master nếu có
+        if os.path.isdir(master_path) and os.listdir(master_path):
+            try:
+                print(f"[InitBrowser] Đang copy từ master: {master_path}")
+                for item in os.listdir(master_path):
+                    # Chỉ copy Extensions và các file cần thiết, KHÔNG copy Default
+                    if item in ('Extensions',):
+                        src = os.path.join(master_path, item)
+                        dst = os.path.join(temp_profile_dir, item)
+                        if os.path.isdir(src):
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+                            print(f"[InitBrowser] Đã copy: {item}")
+                    elif item not in ('Default', 'GPUCache', 'ShaderCache', 'blob_storage', 'Code Cache', 'Service Worker'):
+                        # Copy các file cấu hình khác (không phải thư mục Default)
+                        src = os.path.join(master_path, item)
+                        dst = os.path.join(temp_profile_dir, item)
+                        if os.path.isfile(src):
+                            shutil.copy2(src, dst)
+                print(f"[InitBrowser] Đã copy master profile thành công")
+                
+                # Xóa các file lock/temp để tránh crash
+                try:
+                    locks_to_remove = [
+                        os.path.join(temp_profile_dir, "Default", "LOCK"),
+                        os.path.join(temp_profile_dir, "Default", "lockfile"),
+                        os.path.join(temp_profile_dir, "Default", "Login Data-journal"),
+                        os.path.join(temp_profile_dir, "Default", "Cookies-journal"),
+                        os.path.join(temp_profile_dir, "Default", "History-journal"),
+                        os.path.join(temp_profile_dir, "Default", "Network Action Predictor-journal"),
+                        os.path.join(temp_profile_dir, "Default", "QuotaManager-journal"),
+                        os.path.join(temp_profile_dir, "Default", "Web Data-journal"),
+                        os.path.join(temp_profile_dir, "Default", "last_session"),
+                        os.path.join(temp_profile_dir, "Default", "Current Tabs"),
+                        os.path.join(temp_profile_dir, "Default", "Current Session"),
+                        os.path.join(temp_profile_dir, "Last Version"),
+                        os.path.join(temp_profile_dir, "Local State"),
+                    ]
+                    for lock_file in locks_to_remove:
+                        if os.path.exists(lock_file):
+                            try:
+                                os.remove(lock_file)
+                                print(f"[InitBrowser] Đã xóa: {os.path.basename(lock_file)}")
+                            except:
+                                pass
+                except Exception as clean_err:
+                    print(f"[InitBrowser] Lỗi khi xóa locks: {clean_err}")
+            except Exception as copy_err:
+                print(f"[InitBrowser] Lỗi copy master (dùng profile trống): {copy_err}")
+        else:
+            print(f"[InitBrowser] Không có master, dùng profile trống")
+        
+        # Khởi động browser
+        playwright = sync_playwright().start()
+        
+        args = [
+            "--disable-blink-features=AutomationControlled",
+            "--disable-gpu",
+            "--no-first-run",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-background-networking",
+        ]
+        
+        # Load extensions nếu có
+        ext_path = os.path.join(temp_profile_dir, "Extensions")
+        if os.path.isdir(ext_path):
+            try:
+                ext_folders = []
+                for ext_id in os.listdir(ext_path):
+                    ext_full_path = os.path.join(ext_path, ext_id)
+                    if os.path.isdir(ext_full_path):
+                        # Tìm thư mục version (thường là duy nhất)
+                        versions = [v for v in os.listdir(ext_full_path) if os.path.isdir(os.path.join(ext_full_path, v))]
+                        if versions:
+                            version_path = os.path.join(ext_full_path, versions[0])
+                            ext_folders.append(version_path)
+                
+                if ext_folders:
+                    load_ext_arg = f"--load-extension={','.join(ext_folders)}"
+                    args.append(load_ext_arg)
+                    args.append(f"--disable-extensions-except={','.join(ext_folders)}")
+                    print(f"[InitBrowser] Đã load {len(ext_folders)} extension(s)")
+            except Exception as ext_err:
+                print(f"[InitBrowser] Lỗi load extensions: {ext_err}")
+        
+        context = playwright.chromium.launch_persistent_context(
+            user_data_dir=temp_profile_dir,
+            headless=headless,
+            args=args,
+            viewport={"width": 1280, "height": 800},
+            accept_downloads=True
+        )
+        
+        page = context.pages[0] if context.pages else context.new_page()
+        
+        # Lưu session
+        from datetime import datetime
+        with _sessions_lock:
+            _browser_sessions[session_id] = {
+                'context': context,
+                'page': page,
+                'playwright': playwright,
+                'profile_dir': temp_profile_dir,
+                'email': None,
+                'password': None,
+                'created_at': datetime.now()
+            }
+        
+        print(f"[InitBrowser] Đã khởi tạo browser cho session {session_id[:8]}...")
+        return True
+        
+    except Exception as e:
+        print(f"[InitBrowser] Lỗi: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def navigate_to_facebook_login(session_id: str) -> bool:
+    """Điều hướng đến trang login Facebook"""
+    with _sessions_lock:
+        session = _browser_sessions.get(session_id)
+    
+    if not session:
+        print(f"[Navigate] Không tìm thấy session {session_id[:8]}...")
+        return False
+    
+    return _navigate_to_facebook_login_impl(session_id)
+
+def _navigate_to_facebook_login_impl(session_id: str) -> bool:
+    """Implementation thực sự của navigate_to_facebook_login"""
+    with _sessions_lock:
+        session = _browser_sessions.get(session_id)
+    
+    if not session:
+        print(f"[Navigate] Không tìm thấy session {session_id[:8]}...")
+        return False
+    
+    try:
+        page = session['page']
+        page.goto("https://www.facebook.com/login/?locale=en_GB", wait_until="domcontentloaded", timeout=30000)
+        print(f"[Navigate] URL hiện tại: {page.url}")
+        return True
+    except Exception as e:
+        print(f"[Navigate] Lỗi: {e}")
+        return False
+
+def cleanup_expired_sessions(max_age_minutes: int = 5):
+    """Xóa các session đã tồn tại quá lâu (mặc định 5 phút)"""
+    from datetime import datetime, timedelta
+    
+    with _sessions_lock:
+        now = datetime.now()
+        expired_sessions = []
+        
+        for session_id, session in _browser_sessions.items():
+            created_at = session.get('created_at')
+            if created_at:
+                age = now - created_at
+                if age > timedelta(minutes=max_age_minutes):
+                    expired_sessions.append(session_id)
+        
+        for session_id in expired_sessions:
+            try:
+                session = _browser_sessions[session_id]
+                # Đóng browser nếu còn mở
+                try:
+                    session['context'].close()
+                except:
+                    pass
+                del _browser_sessions[session_id]
+                print(f"[Cleanup] Đã xóa session hết hạn: {session_id[:8]}...")
+            except Exception as e:
+                print(f"[Cleanup] Lỗi khi xóa session {session_id[:8]}...: {e}")
+        
+        if expired_sessions:
+            print(f"[Cleanup] Đã xóa {len(expired_sessions)} session hết hạn")
+
+def get_session_browser(session_id: str):
+    """Lấy thông tin browser của session - tự động cleanup session cũ"""
+    # Cleanup session cũ trước khi lấy
+    cleanup_expired_sessions()
+    
+    with _sessions_lock:
+        return _browser_sessions.get(session_id)
+
+def get_browser_session(email: str):
+    """Tìm session theo email"""
+    with _sessions_lock:
+        for session_id, session in _browser_sessions.items():
+            if session.get('email') == email:
+                return session
+    return None
+
+def transfer_session_to_email(session_id: str, email: str):
+    """Chuyển session sang email"""
+    with _sessions_lock:
+        if session_id in _browser_sessions:
+            _browser_sessions[session_id]['email'] = email
+            print(f"[Transfer] Session {session_id[:8]}... -> Email {email}")
+
+def login_with_session(session_id: str, email: str, password: str, timeout: int = 300000) -> tuple[str, bool, bool]:
+    """Đăng nhập với session đã có - trả về (html, should_get_cookies, login_failed)
+    
+    Lưu ý: Hàm này được gọi trong session worker thread, nên chạy trực tiếp 
+    không cần tạo thread con để tránh xung đột với Playwright
+    """
+    return _login_with_session_impl(session_id, email, password, timeout)
+
+def _login_with_session_impl(session_id: str, email: str, password: str, timeout: int = 300000) -> tuple[str, bool, bool]:
+    """Implementation thực sự của login_with_session"""
+    with _sessions_lock:
+        session = _browser_sessions.get(session_id)
+    
+    # Nếu chưa có session, tự động khởi tạo browser
+    if not session:
+        print(f"[LoginWithSession] Session chưa tồn tại, đang khởi tạo browser...")
+        success = _init_browser_session_impl(session_id, headless=False)
+        if success:
+            # Điều hướng đến trang login
+            nav_success = _navigate_to_facebook_login_impl(session_id)
+            if nav_success:
+                with _sessions_lock:
+                    session = _browser_sessions.get(session_id)
+            if not session:
+                print(f"[LoginWithSession] Không thể khởi tạo browser")
+                return "", False, True  # login_failed=True
+        else:
+            print(f"[LoginWithSession] Khởi tạo browser thất bại")
+            return "", False, True  # login_failed=True
+    
+    if not session:
+        return "", False, True
+        
+    page = session['page']
+    
+    try:
+        # Lưu credentials
+        session['email'] = email
+        session['password'] = password
+        
+        # Điền form
+        print(f"[LoginWithSession] Đang điền thông tin đăng nhập...")
+        page.fill('input[name="email"]', email)
+        time.sleep(0.3)
+        page.fill('input[name="pass"]', password)
+        time.sleep(0.3)
+        
+        # Click đăng nhập
+        print(f"[LoginWithSession] Đang tìm nút đăng nhập...")
+        login_button = page.locator('[aria-label="Log in"][role="button"]')
+        if login_button.count() == 0:
+            login_button = page.locator('button[name="login"]')
+        if login_button.count() == 0:
+            login_button = page.locator('button[type="submit"]')
+        
+        if login_button.count() > 0:
+            print(f"[LoginWithSession] Đang click đăng nhập...")
+            login_button.first.click()
+        else:
+            return "", False, False
+        
+        # Đợi và kiểm tra URL trong 7 giây, mỗi 0.5s kiểm tra một lần
+        print(f"[LoginWithSession] Đang đợi phản hồi sau đăng nhập...")
+        is_2fa = False
+        login_success = False
+        
+        for i in range(14):  # 14 lần x 0.5s = 7s
+            time.sleep(0.5)
+            # Lấy URL mới nhất từ browser bằng JavaScript
+            try:
+                current_url = page.evaluate("() => window.location.href")
+            except:
+                current_url = page.url
+            print(f"[LoginWithSession] Kiểm tra URL ({i+1}/14): {current_url}")
+            
+            # Kiểm tra 2FA - nhiều patterns
+            if any(pattern in current_url for pattern in ['two_step_verification/two_factor', 'two_factor', '2fa']):
+                print(f"[LoginWithSession] Phát hiện trang 2FA!")
+                is_2fa = True
+                break
+            
+            # Kiểm tra đăng nhập thành công (không còn ở trang login)
+            if '/login' not in current_url and 'facebook.com' in current_url:
+                print(f"[LoginWithSession] Đăng nhập thành công!")
+                login_success = True
+                break
+            
+            # Kiểm tra lỗi đăng nhập
+            if '/login/web/' in current_url:
+                print(f"[LoginWithSession] Lỗi đăng nhập (sai mật khẩu)")
+                return "", False, True
+        
+        # Nếu là 2FA, trả về HTML để hiển thị
+        if is_2fa:
+            html = page.content()
+            return html, False, False
+        
+        # Nếu đăng nhập thành công, lấy HTML
+        if login_success:
+            html = page.content()
+            return html, True, False
+        
+        # Nếu sau 15s vẫn ở trang login, reload và trả về lỗi
+        print(f"[LoginWithSession] Hết thời gian đợi, vẫn ở trang login - đang reload...")
+        try:
+            page.reload(wait_until="domcontentloaded", timeout=10000)
+            print(f"[LoginWithSession] Đã reload trang")
+        except Exception as reload_err:
+            print(f"[LoginWithSession] Lỗi reload: {reload_err}")
+        
+        return "", False, True  # Trả về login_failed=True để hiển thị cảnh báo
+        
+    except Exception as e:
+        print(f"[LoginWithSession] Lỗi: {e}")
+        return "", False, False
