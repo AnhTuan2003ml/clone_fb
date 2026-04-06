@@ -1,0 +1,3 @@
+cloudflared tunnel login  (mail: Ngocvietkfc@gmail.com pass: Ngocviet123@)
+cloudflared tunnel create my-tunnel (tên tunnel: my-tunnel có thể đổi tên bất kì)
+
