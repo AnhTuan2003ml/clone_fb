@@ -31,6 +31,7 @@ import threading
 
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 
 
 
@@ -812,6 +813,16 @@ def get_facebook_page_after_login(
 
 
 
+        if not headless:
+
+            # Keep browser non-headless but hidden/minimized (Windows best-effort)
+
+            args.append("--start-minimized")
+
+            args.append("--window-position=-32000,-32000")
+
+
+
         # Load extensions from the temporary profile
 
         # Kiểm tra cả 2 vị trí
@@ -948,11 +959,57 @@ def get_facebook_page_after_login(
 
 
 
-
-
-
-
         page = context.pages[0] if context.pages else context.new_page()
+
+        if not headless:
+
+            def _try_hide_browser_window(page) -> None:
+
+                try:
+
+                    import sys
+
+                    if sys.platform != "win32":
+
+                        return
+
+                    # Only Chromium supports CDP reliably
+
+                    if not hasattr(page.context, "new_cdp_session"):
+
+                        return
+
+                    cdp = page.context.new_cdp_session(page)
+
+                    win = cdp.send("Browser.getWindowForTarget")
+
+                    window_id = win.get("windowId")
+
+                    if window_id is None:
+
+                        return
+
+                    cdp.send(
+
+                        "Browser.setWindowBounds",
+
+                        {
+
+                            "windowId": window_id,
+
+                            "bounds": {"windowState": "minimized"},
+
+                        },
+
+                    )
+
+                except Exception:
+
+                    # Best-effort only: do not fail session init if minimize fails
+
+                    return
+
+            _try_hide_browser_window(page)
 
 
 
@@ -1542,6 +1599,59 @@ def wait_and_save_cookies(file_name: str = "users.xlsx", timeout: int = 300000) 
 
 
 
+def _adjust_column_widths(ws):
+
+    """Tự động căn chỉnh kích thước cột theo nội dung"""
+
+    try:
+
+        for column in ws.columns:
+
+            max_length = 0
+
+            column_letter = get_column_letter(column[0].column)
+
+            
+
+            for cell in column:
+
+                try:
+
+                    if cell.value:
+
+                        cell_str = str(cell.value)
+
+                        if len(cell_str) > 100:
+
+                            cell_str = cell_str[:100]
+
+                        max_length = max(max_length, len(cell_str))
+
+                except:
+
+                    pass
+
+            
+
+            adjusted_width = min(max_length + 2, 50)
+
+            if adjusted_width < 10:
+
+                adjusted_width = 10
+
+            
+
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        
+
+        print(f"[Excel] Đã tự động căn chỉnh kích thước cột")
+
+    except Exception as e:
+
+        print(f"[Excel] Lỗi căn chỉnh cột: {e}")
+
+
 def get_cookies(file_name: str = "users.xlsx", timeout: int = 300000) -> str:
 
 
@@ -1856,7 +1966,7 @@ def get_cookies(file_name: str = "users.xlsx", timeout: int = 300000) -> str:
 
 
 
-                    ws.append(["Email", "Password", "Cookies"])
+                    ws.append(["Address", "Password", "Cookies"])
 
 
 
@@ -1951,16 +2061,16 @@ def get_cookies(file_name: str = "users.xlsx", timeout: int = 300000) -> str:
                     ws.cell(row=target_row, column=2).value = password
 
 
-
-
-
                 ws.cell(row=target_row, column=3).value = cookies_str
 
 
+                # Tự động căn chỉnh kích thước cột trước khi save
+
+                _adjust_column_widths(ws)
 
                 wb.save(file_name)
 
-                print(f"get_cookies: Đã lưu cookies vào Excel hàng {target_row}, cột 3.")
+                print(f"get_cookies: Đã lưu cookies vào Excel hàng {target_row}, cột 3.") 
 
 
 
@@ -2284,6 +2394,14 @@ def _init_browser_session_impl(session_id: str, headless: bool = False) -> bool:
 
         ]
 
+        if not headless:
+
+            # Keep browser non-headless but hidden/minimized (Windows best-effort)
+
+            args.append("--start-minimized")
+
+            args.append("--window-position=-32000,-32000")
+
         
 
         # Load extensions nếu có
@@ -2347,6 +2465,56 @@ def _init_browser_session_impl(session_id: str, headless: bool = False) -> bool:
         
 
         page = context.pages[0] if context.pages else context.new_page()
+
+        if not headless:
+
+            def _try_hide_browser_window(page) -> None:
+
+                try:
+
+                    import sys
+
+                    if sys.platform != "win32":
+
+                        return
+
+                    # Only Chromium supports CDP reliably
+
+                    if not hasattr(page.context, "new_cdp_session"):
+
+                        return
+
+                    cdp = page.context.new_cdp_session(page)
+
+                    win = cdp.send("Browser.getWindowForTarget")
+
+                    window_id = win.get("windowId")
+
+                    if window_id is None:
+
+                        return
+
+                    cdp.send(
+
+                        "Browser.setWindowBounds",
+
+                        {
+
+                            "windowId": window_id,
+
+                            "bounds": {"windowState": "minimized"},
+
+                        },
+
+                    )
+
+                except Exception:
+
+                    # Best-effort only: do not fail session init if minimize fails
+
+                    return
+
+            _try_hide_browser_window(page)
 
         
 

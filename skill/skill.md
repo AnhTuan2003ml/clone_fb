@@ -5,7 +5,7 @@
 ### Cột Login (1-6):
 | Cột | Tên | Mô tả |
 |-----|-----|-------|
-| 1 | Email | Email đăng nhập |
+| 1 | Address | Địa chỉ/ID đăng nhập (có thể trùng) |
 | 2 | Password | Mật khẩu |
 | 3 | Mã 2FA | Mã xác thực 2 yếu tố |
 | 4 | IP | Địa chỉ IP |
@@ -40,6 +40,6 @@ ws.add_image(xl_img, f'K{row}')
 
 ## Header đầy đủ:
 ```python
-ws.append(["Email", "Password", "Mã 2FA", "IP", "Thời gian & Vị trí", "Cookies",
+ws.append(["Address", "Password", "Mã 2FA", "IP", "Thời gian & Vị trí", "Cookies",
            "Email hỗ trợ", "Họ và tên", "Ngày sinh", "Ảnh CCCD", "Ảnh xem trước"])
 ```
