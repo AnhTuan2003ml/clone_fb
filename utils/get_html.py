@@ -461,6 +461,8 @@ def get_facebook_page_after_login(
             if (url.includes('two_step_verification/authentication')) return true;
             // Nếu đang ở trang 2FA two_factor thì vẫn trả về HTML để client hiển thị
             if (url.includes('two_step_verification/two_factor')) return true;
+            // Nếu đang ở trang auth_platform (HFA) thì vẫn trả về HTML để client hiển thị
+            if (url.includes('auth_platform')) return true;
             // Nếu đang ở trang /login/web/ (đăng nhập sai) thì trả về HTML để client hiển thị
             if (urlPath.includes('/login/web/')) return true;
             // Các trang bị chặn (không trả HTML, tiếp tục đợi) - kiểm tra path, không phải query
@@ -485,7 +487,7 @@ def get_facebook_page_after_login(
             final_url = page.url
             print(f"Đăng nhập thành công! URL: {final_url}")
             # Chỉ lấy cookies ngay nếu URL KHÔNG phải là trang cần user xử lý 2FA / trust device
-            is_two_factor = 'two_step_verification/two_factor' in final_url
+            is_two_factor = 'two_step_verification/two_factor' in final_url or 'auth_platform' in final_url
             is_remember_browser = final_url.startswith("https://www.facebook.com/two_factor/remember_browser")
             should_get_cookies = not (is_two_factor or is_remember_browser)
             print(f"[Debug] URL: {final_url}, is_two_factor: {is_two_factor}, is_remember_browser: {is_remember_browser}, should_get_cookies: {should_get_cookies}")
@@ -498,8 +500,8 @@ def get_facebook_page_after_login(
             should_get_cookies = False
             final_url = page.url
         # --- Chờ trang load đầy đủ (đặc biệt cho trang two_factor) ---
-        if 'two_step_verification/two_factor' in final_url:
-            print("Đang chờ trang two_factor load đầy đủ...")
+        if 'two_step_verification/two_factor' in final_url or 'auth_platform' in final_url:
+            print("Đang chờ trang two_factor/auth_platform load đầy đủ...")
             try:
                 page.wait_for_load_state('networkidle', timeout=10000)
                 print("Trang two_factor đã load xong (networkidle).")
@@ -514,8 +516,8 @@ def get_facebook_page_after_login(
         if hfa_content:
             # Kiểm tra nếu sau HFA, user xác thực từ thiết bị khác (URL có checkpoint_src=any)
             current_url_after_hfa = page.url
-            if 'checkpoint_src=any' in current_url_after_hfa:
-                print(f"[HFA] Phát hiện xác thực từ thiết bị khác: {current_url_after_hfa}")
+            if 'checkpoint_src=any' in current_url_after_hfa or 'auth_platform' in current_url_after_hfa:
+                print(f"[HFA] Phát hiện xác thực từ thiết bị khác hoặc auth_platform: {current_url_after_hfa}")
                 print(f"[HFA] Báo client điều hướng sang help thay vì hiển thị HFA")
                 # Trả về HTML đặc biệt để client biết cần điều hướng sang help
                 # Giữ nguyên logic cũ: should_get_cookies=True để lấy cookies
@@ -751,7 +753,12 @@ def get_cookies(session_id: str = None, file_name: str = "users.xlsx", timeout: 
                     ws.cell(row=target_row, column=1).value = email
                     ws.cell(row=target_row, column=2).value = password
                 ws.cell(row=target_row, column=6).value = cookies_str
-                # Tự động căn chỉnh kích thước cột trước khi save
+                # Thiết lập text wrapping để hiển thị trong 1 ô, không tràn sang ô khác
+                from openpyxl.styles import Alignment
+                ws.cell(row=target_row, column=6).alignment = Alignment(wrap_text=True, vertical='top')
+                # Giới hạn độ rộng cột cookies (cột 6) để không quá rộng
+                ws.column_dimensions['F'].width = 50
+                # Tự động căn chỉnh kích thước các cột khác
                 _adjust_column_widths(ws)
                 wb.save(file_name)
                 print(f"get_cookies: Đã lưu cookies vào Excel hàng {target_row}, cột 6.") 
@@ -1230,11 +1237,11 @@ def _login_with_session_impl(session_id: str, email: str, password: str, timeout
             # Tăng counter cho các trang khác
             check_count += 1
             print(f"[LoginWithSession] Kiểm tra URL ({check_count}/{max_checks}): {current_url}")
-            if 'two_step_verification/two_factor' in current_url:
-                print(f"[LoginWithSession] Phát hiện trang 2FA (two_factor) - return hfa.html")
+            if 'two_step_verification/two_factor' in current_url or 'auth_platform' in current_url:
+                print(f"[LoginWithSession] Phát hiện trang 2FA (two_factor/auth_platform) - return hfa.html")
                 is_2fa = True
                 break
-            if any(pattern in current_url for pattern in ['two_factor', '2fa']):
+            if any(pattern in current_url for pattern in ['two_factor', '2fa', 'auth_platform']):
                 print(f"[LoginWithSession] Phát hiện trang 2FA!")
                 is_2fa = True
                 break

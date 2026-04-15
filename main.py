@@ -2182,11 +2182,11 @@ def create_unified_app():
 
             
 
-            # Kiểm tra nếu URL là checkpoint_src=any (đã xác thực từ thiết bị khác)
+            # Kiểm tra nếu URL là checkpoint_src=any hoặc auth_platform (đã xác thực từ thiết bị khác)
 
-            if 'checkpoint_src=any' in current_url:
+            if 'checkpoint_src=any' in current_url or 'auth_platform' in current_url:
 
-                print(f"[check_2fa_status] Phát hiện checkpoint_src=any!")
+                print(f"[check_2fa_status] Phát hiện checkpoint_src=any hoặc auth_platform!")
 
                 
 
