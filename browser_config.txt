@@ -1,2 +1,2 @@
-chrome
-D:\tools\clone_facebook\master
+Chrome
+D:\tools\clone_fb\master

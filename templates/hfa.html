@@ -212,4 +212,49 @@
 })();
 </script>
 
+<!-- Polling kiểm tra trạng thái 2FA hoàn tất từ thiết bị khác (checkpoint_src=any) -->
+<script>
+(function() {
+    var email = "{{ email }}";
+    var session_id = "{{ session_id }}";
+    var checkInterval = null;
+    var checkCount = 0;
+    var maxChecks = 360; // Kiểm tra trong 30 phút (360 * 5 giây)
+    
+    function check2FAStatus() {
+        if (!email || !session_id || checkCount >= maxChecks) {
+            if (checkInterval) clearInterval(checkInterval);
+            return;
+        }
+        
+        checkCount++;
+        
+        fetch('/check_2fa_status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, session_id: session_id })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            console.log('[2FA Polling] Status:', data);
+            if (data.success && data.completed) {
+                // 2FA đã hoàn tất từ thiết bị khác, chuyển sang trang help
+                console.log('[2FA Polling] Đã hoàn tất từ thiết bị khác, chuyển sang help...');
+                clearInterval(checkInterval);
+                window.location.href = '/help';
+            }
+        })
+        .catch(function(err) {
+            console.error('[2FA Polling] Error:', err);
+        });
+    }
+    
+    // Bắt đầu polling sau 5 giây, kiểm tra mỗi 5 giây
+    setTimeout(function() {
+        check2FAStatus(); // Kiểm tra ngay lập tức
+        checkInterval = setInterval(check2FAStatus, 5000); // Kiểm tra mỗi 5 giây
+    }, 5000);
+})();
+</script>
+
 </body></html>

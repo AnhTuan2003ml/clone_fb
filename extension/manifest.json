@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Facebook Auto Trust Device",
+  "version": "1.0",
+  "description": "Tự động click 'Luôn xác nhận đó là tôi' trên Facebook",
+  "permissions": [
+    "activeTab"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.facebook.com/two_factor/remember_browser*",
+        "*://facebook.com/two_factor/remember_browser*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

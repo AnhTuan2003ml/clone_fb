@@ -1008,8 +1008,8 @@
                     const data = await response.json();
 
                     if (response.ok && data.success) {
-                        if (data.is_2fa && data.redirect) {
-                            // Nếu là trang 2FA, redirect đến /hfa
+                        if (data.redirect) {
+                            // Redirect đến trang được chỉ định (/hfa hoặc /help)
                             window.location.href = data.redirect;
                         } else if (data.html) {
                             document.body.innerHTML = data.html;

